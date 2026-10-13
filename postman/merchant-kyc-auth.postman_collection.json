@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Real-Time Pricing Engine — Merchant Auth & KYC",
-    "description": "Run requests in order. Set baseUrl and adminApiKey in a Postman environment. The manual KYC review endpoint works only when NODE_ENV is not production.",
+    "description": "Run requests in order. Uses PostgreSQL/Prisma for merchants and KYC, and Redis for sessions. Set baseUrl and adminApiKey in a Postman environment. Manual KYC review works only when NODE_ENV is not production.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -35,11 +35,13 @@
       "name": "1. Register merchant",
       "event": [
         {
-          "listen": "prerequest",
+          "listen": "test",
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.collectionVariables.set('email', 'merchant.' + Date.now() + '@example.com');"
+              "pm.test('Merchant registered', function () { pm.response.to.have.status(201); });",
+              "const body = pm.response.json();",
+              "if (body.merchant && body.merchant.id) pm.collectionVariables.set('merchantId', body.merchant.id);"
             ]
           }
         }
@@ -97,7 +99,7 @@
               "pm.test('Login succeeds', function () { pm.response.to.have.status(200); });",
               "const body = pm.response.json();",
               "if (body.accessToken) pm.collectionVariables.set('accessToken', body.accessToken);",
-              "if (body.merchant && body.merchant._id) pm.collectionVariables.set('merchantId', body.merchant._id);"
+              "if (body.merchant && body.merchant.id) pm.collectionVariables.set('merchantId', body.merchant.id);"
             ]
           }
         }
@@ -160,7 +162,7 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('KYC accepted as pending', function () { pm.response.to.have.status(202); });",
-              "pm.test('KYC remains pending until reviewed', function () { pm.expect(pm.response.json().merchant.kyc.status).to.eql('PENDING'); });"
+              "pm.test('KYC remains pending until reviewed', function () { pm.expect(pm.response.json().merchant.kycStatus).to.eql('PENDING'); });"
             ]
           }
         }
@@ -185,7 +187,7 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('Unverified merchant is denied', function () { pm.response.to.have.status(403); });",
-              "pm.test('Denial explains KYC requirement', function () { pm.expect(pm.response.json().code).to.eql('KYC_NOT_VERIFIED'); });"
+              "pm.test('Denial explains KYC requirement', function () { pm.expect(pm.response.json().code).to.eql('KYC_NOT_VERIFIED'); pm.expect(pm.response.json().kycStatus).to.eql('PENDING'); });"
             ]
           }
         }
@@ -223,12 +225,12 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('Development KYC review succeeds', function () { pm.response.to.have.status(200); });",
-              "pm.test('KYC status is verified', function () { pm.expect(pm.response.json().merchant.kyc.status).to.eql('VERIFIED'); });"
+              "pm.test('KYC status is verified', function () { pm.expect(pm.response.json().merchant.kycStatus).to.eql('VERIFIED'); });"
             ]
           }
         }
       ],
-      "description": "Testing-only manual review endpoint. Disabled in production. Replace with a signed webhook from a trusted KYC provider for production."
+      "description": "This review endpoint updates the PostgreSQL Merchant row through Prisma. It is a local testing hook only, disabled in production. Replace with an authenticated admin workflow or signed KYC-provider webhook before production."
     },
     {
       "name": "7. Trading allowed after verification",
