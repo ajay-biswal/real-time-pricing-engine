@@ -5,10 +5,15 @@ import { prisma } from "./config/prisma.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
 import { connectMarketData } from "./modules/market-data/market-data.client.js";
 import type WebSocket from "ws";
+import {
+  attachClientWebSocket,
+  closeClientWebSocket,
+} from "./modules/distribution/client-ws.server.js";
 
 const server = createServer(app);
 let marketDataSocket: WebSocket | undefined;
 let shuttingDown = false;
+
 
 async function closeDependencies(): Promise<void> {
   marketDataSocket?.close();
@@ -16,8 +21,10 @@ async function closeDependencies(): Promise<void> {
   await Promise.allSettled([
     prisma.$disconnect(),
     closeRedis(),
+    closeClientWebSocket(),
   ]);
 }
+
 
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
@@ -46,6 +53,10 @@ async function main(): Promise<void> {
     console.log("PostgreSQL connected successfully");
 
     await connectRedis();
+
+    await attachClientWebSocket(server);
+
+    marketDataSocket = connectMarketData();
 
     marketDataSocket = connectMarketData();
 

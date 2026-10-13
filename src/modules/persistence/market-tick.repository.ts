@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prisma.js";
+import { updateMarketSnapshot } from "../pricing/pricing.service.js";
 
 export interface MarketTickInput {
   symbol: string;
@@ -18,4 +19,6 @@ export async function saveMarketTick(
       timestamp: tick.timestamp,
     },
   });
+
+  await updateMarketSnapshot(tick.symbol);
 }
