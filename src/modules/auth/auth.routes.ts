@@ -1,13 +1,13 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { ObjectId } from "mongodb";
 import { redisClient } from "../../config/redis.js";
-import { getMongoDb } from "../../config/mongodb.js";
+import { prisma } from "../../config/prisma.js";
 import { env } from "../../config/env.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { requireAuth, hashSessionToken } from "./auth.middleware.js";
-import { toPublicMerchant, type MerchantRecord } from "./auth.types.js";
+import { toPublicMerchant } from "./auth.types.js";
 
 export const authRouter = Router();
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
@@ -45,37 +45,29 @@ authRouter.post("/register", rateLimit, async (req: Request, res: Response, next
       return;
     }
 
-    const collection = getMongoDb().collection<MerchantRecord>("merchants");
-    const existing = await collection.findOne({ email: parsed.data.email }, { projection: { _id: 1 } });
-    if (existing) {
-      res.status(409).json({ error: "An account with this email already exists", code: "EMAIL_IN_USE" });
-      return;
-    }
+    const merchant = await prisma.merchant.create({
+      data: {
+        email: parsed.data.email,
+        passwordHash: await hashPassword(parsed.data.password),
+        role: "MERCHANT",
+        accountStatus: "ACTIVE",
+        kycStatus: "NOT_SUBMITTED",
+      },
+    });
 
-    const now = new Date();
-    const merchant: Omit<MerchantRecord, "_id"> = {
-      email: parsed.data.email,
-      passwordHash: await hashPassword(parsed.data.password),
-      role: "MERCHANT",
-      accountStatus: "ACTIVE",
-      kyc: { status: "NOT_SUBMITTED", providerReference: null, verifiedAt: null, rejectionReason: null },
-      createdAt: now,
-      updatedAt: now,
-    };
-    const result = await collection.insertOne(merchant as MerchantRecord);
     res.status(201).json({
       message: "Merchant account created. Submit KYC before accessing trading functionality.",
       merchant: {
-        id: result.insertedId.toHexString(),
+        id: merchant.id,
         email: merchant.email,
         role: merchant.role,
         accountStatus: merchant.accountStatus,
-        kyc: merchant.kyc,
-        createdAt: now,
+        kycStatus: merchant.kycStatus,
+        createdAt: merchant.createdAt,
       },
     });
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       res.status(409).json({ error: "An account with this email already exists", code: "EMAIL_IN_USE" });
       return;
     }
@@ -91,9 +83,7 @@ authRouter.post("/login", rateLimit, async (req: Request, res: Response, next: N
       return;
     }
 
-    const merchant = await getMongoDb().collection<MerchantRecord>("merchants").findOne({
-      email: parsed.data.email,
-    });
+    const merchant = await prisma.merchant.findUnique({ where: { email: parsed.data.email } });
     if (!merchant || !(await verifyPassword(parsed.data.password, merchant.passwordHash))) {
       res.status(401).json({ error: "Invalid email or password", code: "INVALID_CREDENTIALS" });
       return;
@@ -104,7 +94,7 @@ authRouter.post("/login", rateLimit, async (req: Request, res: Response, next: N
     }
 
     const token = randomBytes(32).toString("base64url");
-    await redisClient.set(`auth:session:${hashSessionToken(token)}`, merchant._id.toHexString(), {
+    await redisClient.set(`auth:session:${hashSessionToken(token)}`, merchant.id, {
       EX: SESSION_TTL_SECONDS,
     });
 
@@ -139,8 +129,8 @@ authRouter.post("/logout", requireAuth, async (req: Request, res: Response, next
   }
 });
 
-// Development-only endpoint to make Postman smoke tests possible without a real KYC vendor.
-// In production, replace this with a signed webhook/provider verification workflow.
+// Development-only endpoint for Postman smoke tests. Production KYC decisions must
+// come from an authenticated admin workflow or a verified KYC-provider webhook.
 authRouter.patch("/admin/merchants/:merchantId/kyc", async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (env.NODE_ENV === "production") {
@@ -155,7 +145,9 @@ authRouter.patch("/admin/merchants/:merchantId/kyc", async (req: Request, res: R
       res.status(403).json({ error: "Admin authorization required" });
       return;
     }
-    if (!ObjectId.isValid(req.params.merchantId)) {
+
+    const merchantId = z.string().min(1).safeParse(req.params.merchantId);
+    if (!merchantId.success) {
       res.status(400).json({ error: "Invalid merchant ID" });
       return;
     }
@@ -173,25 +165,25 @@ authRouter.patch("/admin/merchants/:merchantId/kyc", async (req: Request, res: R
       return;
     }
 
-    const now = new Date();
-    const update = await getMongoDb().collection<MerchantRecord>("merchants").findOneAndUpdate(
-      { _id: new ObjectId(req.params.merchantId), "kyc.status": "PENDING" },
-      {
-        $set: {
-          "kyc.status": parsed.data.status,
-          "kyc.verifiedAt": parsed.data.status === "VERIFIED" ? now : null,
-          "kyc.rejectionReason": parsed.data.status === "REJECTED" ? parsed.data.rejectionReason : null,
-          "kyc.providerReference": parsed.data.providerReference ?? null,
-          updatedAt: now,
-        },
+    const result = await prisma.merchant.updateMany({
+      where: { id: merchantId.data, kycStatus: "PENDING" },
+      data: {
+        kycStatus: parsed.data.status,
+        kycVerifiedAt: parsed.data.status === "VERIFIED" ? new Date() : null,
+        kycRejectionReason: parsed.data.status === "REJECTED" ? parsed.data.rejectionReason : null,
+        kycProviderReference: parsed.data.providerReference ?? null,
       },
-      { returnDocument: "after", projection: { passwordHash: 0 } },
-    );
-    if (!update) {
+    });
+    if (result.count === 0) {
       res.status(404).json({ error: "Pending KYC application not found" });
       return;
     }
-    res.json({ message: "KYC review completed", merchant: update });
+    const merchant = await prisma.merchant.findUnique({ where: { id: merchantId.data } });
+    if (!merchant) {
+      res.status(404).json({ error: "Merchant not found" });
+      return;
+    }
+    res.json({ message: "KYC review completed", merchant: toPublicMerchant(merchant) });
   } catch (error) {
     next(error);
   }
