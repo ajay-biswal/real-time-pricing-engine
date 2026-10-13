@@ -29,6 +29,35 @@ const BATCH_INTERVAL_MS = 50;
 const MAX_BATCH_SIZE = 250;
 const SLOW_DATABASE_BATCH_MS = 50;
 const MAX_PENDING_TICKS = 10_000;
+const MAX_DATABASE_ATTEMPTS = 3;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function writeBatchWithRetry(batch: PendingTick[]): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_DATABASE_ATTEMPTS; attempt += 1) {
+    try {
+      await prisma.marketTick.createMany({
+        data: batch.map(({ tick }) => ({
+          symbol: tick.symbol,
+          buy: tick.buy,
+          sell: tick.sell,
+          timestamp: tick.timestamp,
+        })),
+        skipDuplicates: true,
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_DATABASE_ATTEMPTS) {
+        await wait(100 * 2 ** (attempt - 1));
+      }
+    }
+  }
+  throw lastError;
+}
 
 const pendingTicks: PendingTick[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -44,9 +73,10 @@ export function saveMarketTick(tick: MarketTickInput): Promise<void> {
     return Promise.reject(new Error(`Market tick persistence queue is full (${MAX_PENDING_TICKS})`));
   }
 
-  // Update the latency-sensitive pricing state before enqueueing durable storage.
-  // The queue bound above prevents accepting an unbounded amount of work.
+  // Measure the synchronous hot path separately from the asynchronous database flush.
+  const acceptedAt = performance.now();
   acceptPricingTick(tick);
+  ingestionLatency.record(elapsedMs(acceptedAt));
 
   const promise = new Promise<void>((resolve, reject) => {
     pendingTicks.push({ tick, acceptedAt: performance.now(), resolve, reject });
@@ -93,14 +123,7 @@ async function flushPendingTicks(reason: FlushReason = "drain"): Promise<void> {
       try {
         const dbStartedAt = performance.now();
         try {
-          await prisma.marketTick.createMany({
-            data: batch.map(({ tick }) => ({
-              symbol: tick.symbol,
-              buy: tick.buy,
-              sell: tick.sell,
-              timestamp: tick.timestamp,
-            })),
-          });
+          await writeBatchWithRetry(batch);
         } finally {
           // Includes Prisma/client overhead and the database round trip.
           dbDurationMs = elapsedMs(dbStartedAt);
@@ -115,10 +138,7 @@ async function flushPendingTicks(reason: FlushReason = "drain"): Promise<void> {
           }
         }
 
-        for (const item of batch) {
-          ingestionLatency.record(elapsedMs(item.acceptedAt));
-          item.resolve();
-        }
+        for (const item of batch) item.resolve();
       } catch (error) {
         for (const item of batch) item.reject(error);
         console.error(`Failed to persist batch of ${batch.length} market ticks:`, error);
@@ -136,8 +156,8 @@ async function flushPendingTicks(reason: FlushReason = "drain"): Promise<void> {
 }
 
 /**
- * Stop accepting new ticks, persist all queued ticks, then refresh every
- * affected snapshot before Redis and PostgreSQL are disconnected.
+ * Stop accepting new ticks and drain queued persistence operations before
+ * PostgreSQL is disconnected. Pricing snapshots are published on tick arrival.
  */
 export async function shutdownMarketTickRepository(): Promise<void> {
   acceptingTicks = false;
