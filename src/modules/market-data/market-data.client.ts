@@ -26,9 +26,7 @@ const inFlightPersists = new Set<Promise<void>>();
 let marketDataStopping = false;
 let activeSocket: WebSocket | undefined;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let mockTimer: ReturnType<typeof setInterval> | undefined;
 let reconnectAttempts = 0;
-let mockTickNumber = 0;
 
 function parseTimestamp(value: string | number | undefined): Date {
   if (value === undefined || value === "") return new Date();
@@ -76,27 +74,6 @@ function persistTick(symbol: string, bid: number, ask: number, timestamp: Date):
     })
     .finally(() => inFlightPersists.delete(persist));
   inFlightPersists.add(persist);
-}
-
-function startMockFeed(): void {
-  if (mockTimer) clearInterval(mockTimer);
-  console.warn("MARKET_DATA_MODE=mock: generating synthetic prices; these are not live market data.");
-
-  mockTimer = setInterval(() => {
-    if (marketDataStopping) return;
-    const timestamp = new Date();
-    mockTickNumber += 1;
-
-    for (let index = 0; index < MARKET_SYMBOLS.length; index += 1) {
-      const symbol = MARKET_SYMBOLS[index]!;
-      const base = 0.75 + index * 0.37;
-      const movement = Math.sin((mockTickNumber + index) / 7) * base * 0.0005;
-      const bid = Number((base + movement).toFixed(8));
-      const ask = Number((bid + Math.max(base * 0.00005, 0.00001)).toFixed(8));
-      persistTick(symbol, bid, ask, timestamp);
-    }
-  }, 1_000);
-  mockTimer.unref();
 }
 
 function scheduleReconnect(): void {
@@ -208,10 +185,6 @@ function openMarketSocket(): WebSocket {
 
 export function connectMarketData(): WebSocket | undefined {
   marketDataStopping = false;
-  if (env.MARKET_DATA_MODE === "mock") {
-    startMockFeed();
-    return undefined;
-  }
   if (!env.MARKET_API_KEY || !env.MARKET_SECRET_KEY) {
     throw new Error("Market API credentials are missing");
   }
@@ -222,8 +195,6 @@ export async function closeMarketDataSocket(_socket?: WebSocket): Promise<void> 
   marketDataStopping = true;
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = undefined;
-  if (mockTimer) clearInterval(mockTimer);
-  mockTimer = undefined;
 
   const socket = activeSocket;
   activeSocket = undefined;
