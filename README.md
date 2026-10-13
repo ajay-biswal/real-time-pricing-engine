@@ -405,3 +405,12 @@ The project implements the main components of a real-time pricing engine: market
 The critical remaining dependency is a successful connection to the assigned live market-data provider. Once the feed is restored, the complete pipeline must be validated with real ticks and measured against the assignment's latency, payload-size, symbol-coverage, persistence, and fault-tolerance requirements.
 
 Implementation status is documented separately from verification status so that successful builds and tests are not mistaken for complete live-system validation.
+
+
+## Merchant authentication and KYC
+
+This branch also adds merchant registration/login, Redis-backed bearer sessions, MongoDB-backed merchant/KYC records, role-based trading access checks, and a development-only manual KYC review route for Postman testing. See [`docs/merchant-auth-kyc.md`](docs/merchant-auth-kyc.md) for environment setup, endpoint payloads, security behavior, and the ordered Postman workflow.
+
+Import [`postman/merchant-kyc-auth.postman_collection.json`](postman/merchant-kyc-auth.postman_collection.json) to exercise registration, login, KYC submission, denial before verification, approval in development, access after verification, and logout.
+
+**Storage note:** The existing pricing engine still uses PostgreSQL/Prisma for market tick persistence. MongoDB is added for merchant identity and KYC state; Redis is used for sessions and the existing cache/distribution path.
