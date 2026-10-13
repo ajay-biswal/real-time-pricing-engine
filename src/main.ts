@@ -5,7 +5,7 @@ import { prisma } from "./config/prisma.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
 import { closeMarketDataSocket, connectMarketData } from "./modules/market-data/market-data.client.js";
 import { shutdownMarketTickRepository } from "./modules/persistence/market-tick.repository.js";
-import type WebSocket from "ws";
+import WebSocket from "ws";
 import {
   attachClientWebSocket,
   closeClientWebSocket,
