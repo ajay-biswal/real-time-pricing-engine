@@ -51,6 +51,7 @@ model MarketTick {
   timestamp DateTime @db.Timestamptz(3)
 
   @@index([symbol, timestamp])
+  @@unique([symbol, timestamp, buy, sell])
 }
 
 model MarketSnapshot {
