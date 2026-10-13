@@ -37,7 +37,7 @@ async function closeDependencies(): Promise<void> {
   await closeMarketDataSocket(marketDataSocket);
   await shutdownMarketTickRepository();
 
-  // Snapshot refreshes must finish before their Redis connection is closed.
+  // All accepted persistence operations have drained before dependencies close.
   await closeClientWebSocket();
 
   const results = await Promise.allSettled([
