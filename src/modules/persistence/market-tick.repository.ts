@@ -1,4 +1,10 @@
+import { performance } from "node:perf_hooks";
 import { prisma } from "../../config/prisma.js";
+import {
+  elapsedMs,
+  ingestionLatency,
+  snapshotLatency,
+} from "../common/latency-metrics.js";
 import { updateMarketSnapshot } from "../pricing/pricing.service.js";
 
 
@@ -11,6 +17,7 @@ export interface MarketTickInput {
 
 interface PendingTick {
   tick: MarketTickInput;
+  acceptedAt: number;
   resolve: () => void;
   reject: (error: unknown) => void;
 }
@@ -33,7 +40,7 @@ export function saveMarketTick(tick: MarketTickInput): Promise<void> {
   }
 
   const promise = new Promise<void>((resolve, reject) => {
-    pendingTicks.push({ tick, resolve, reject });
+    pendingTicks.push({ tick, acceptedAt: performance.now(), resolve, reject });
   });
 
   if (pendingTicks.length >= MAX_BATCH_SIZE) {
@@ -75,7 +82,10 @@ async function flushPendingTicks(): Promise<void> {
           })),
         });
 
-        for (const item of batch) item.resolve();
+        for (const item of batch) {
+          ingestionLatency.record(elapsedMs(item.acceptedAt));
+          item.resolve();
+        }
         for (const symbol of new Set(batch.map(({ tick }) => tick.symbol))) {
           scheduleSnapshotRefresh(symbol);
         }
@@ -116,10 +126,13 @@ async function refreshSnapshot(symbol: string): Promise<void> {
   const work = (async () => {
     do {
       snapshotPending.delete(symbol);
+      const startedAt = performance.now();
       try {
         await updateMarketSnapshot(symbol);
       } catch (error) {
         console.error(`Failed to refresh market snapshot for ${symbol}:`, error);
+      } finally {
+        snapshotLatency.record(elapsedMs(startedAt));
       }
     } while (snapshotPending.has(symbol));
   })();
