@@ -11,8 +11,6 @@ const envSchema = z.object({
   MARKET_SECRET_KEY: z.string().default(""),
 
   DATABASE_URL: z.string().url(),
-  MONGODB_URI: z.string().url().default("mongodb://localhost:27017"),
-  MONGODB_DATABASE: z.string().min(1).default("pricing_engine"),
   REDIS_URL: z.string().url(),
   ADMIN_API_KEY: z.string().default(""),
 });
