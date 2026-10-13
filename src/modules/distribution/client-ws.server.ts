@@ -22,7 +22,11 @@ interface MarketSnapshot {
 
 const clientSubscriptions = new Map<WebSocket, Set<string>>();
 let clientWss: WebSocketServer | undefined;
-let redisSubscriber: ReturnType<typeof redisClient.duplicate> | undefined;
+function createRedisSubscriber() {
+  return redisClient.duplicate();
+}
+
+let redisSubscriber: ReturnType<typeof createRedisSubscriber> | undefined;
 
 export async function attachClientWebSocket(server: Server): Promise<void> {
   if (clientWss) {
