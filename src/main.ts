@@ -10,9 +10,9 @@ import {
   ingestionLatency,
   queueWaitLatency,
   reportFlushReasons,
-  snapshotLatency,
 } from "./modules/common/latency-metrics.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
+import { initializePricingState } from "./modules/pricing/pricing-state.js";
 
 import {
   closeMarketDataSocket,
@@ -92,6 +92,7 @@ async function main(): Promise<void> {
     console.log("PostgreSQL connected successfully");
 
     await connectRedis();
+    await initializePricingState();
     await attachClientWebSocket(server);
 
     marketDataSocket = connectMarketData();
@@ -105,7 +106,6 @@ async function main(): Promise<void> {
           batchSize: batchSizeMetrics.report(),
           flushReasons: reportFlushReasons(),
           ingestion: ingestionLatency.report(),
-          snapshot: snapshotLatency.report(),
         });
       }, 10_000);
       metricsTimer.unref();
