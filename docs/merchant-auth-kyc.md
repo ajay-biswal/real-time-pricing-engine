@@ -87,7 +87,7 @@ Allowed `documentType` values: `PASSPORT`, `NATIONAL_ID`, `DRIVING_LICENSE`. Sub
 
 ### Review KYC for local Postman testing
 
-`PATCH /api/auth/admin/merchants/:merchantId/kyc`
+`PATCH /api/kyc/admin/merchants/:merchantId/kyc`
 
 Header: `x-admin-api-key: <ADMIN_API_KEY>`
 
