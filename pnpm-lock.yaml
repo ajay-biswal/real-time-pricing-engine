@@ -17,9 +17,6 @@ importers:
       express:
         specifier: ^5.3.0
         version: 5.3.0
-      pg:
-        specifier: ^8.23.1
-        version: 8.23.1
       pino:
         specifier: ^10.4.0
         version: 10.4.0
@@ -39,9 +36,6 @@ importers:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
-      '@types/pg':
-        specifier: ^8.23.1
-        version: 8.23.1
       '@types/ws':
         specifier: ^8.18.2
         version: 8.18.2
