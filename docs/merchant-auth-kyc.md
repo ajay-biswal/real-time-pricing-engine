@@ -13,7 +13,12 @@ This module adds merchant registration, JWT bearer authentication, KYC submissio
 Add the development-only review key to your local `.env`:
 
 ```dotenv
-DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/pricing_engine
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5434/pricing_engine
+DATABASE_URL_DOCKER=postgresql://postgres:YOUR_PASSWORD@postgres:5432/pricing_engine
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=YOUR_PASSWORD
+POSTGRES_DB=pricing_engine
+POSTGRES_HOST_PORT=5434
 REDIS_URL=redis://localhost:6379
 ADMIN_API_KEY=use-a-long-random-development-only-secret
 JWT_SECRET=generate-a-random-secret-at-least-32-characters-long
@@ -21,7 +26,9 @@ JWT_SECRET=generate-a-random-secret-at-least-32-characters-long
 
 Keep the real `ADMIN_API_KEY` and market-provider credentials out of Git. The manual review endpoint below is disabled when `NODE_ENV=production`.
 
-Apply the new PostgreSQL migration and generate Prisma Client:
+For local development, make sure `DATABASE_URL` matches your PostgreSQL host port. The Compose API uses `DATABASE_URL_DOCKER` to reach the `postgres` service on port 5432 inside the Docker network. Compose sets `NODE_ENV=production`, so the development-only review route is disabled there; use local `pnpm dev` with `NODE_ENV=development` for the Postman review workflow.
+
+Apply the PostgreSQL migrations and generate Prisma Client:
 
 ```bash
 pnpm install
