@@ -26,7 +26,9 @@ interface MarketSnapshot {
 
 const clientSubscriptions = new Map<WebSocket, Set<string>>();
 let clientWss: WebSocketServer | undefined;
-let redisSubscriber: ReturnType<typeof redisClient.duplicate> | undefined;
+// Keep only the operations needed during shutdown instead of widening the
+// generic Redis client type returned by duplicate().
+let redisSubscriber: { isOpen: boolean; quit(): Promise<unknown> } | undefined;
 
 function sendJson(client: WebSocket, payload: unknown): void {
   if (client.readyState !== WebSocket.OPEN) return;
