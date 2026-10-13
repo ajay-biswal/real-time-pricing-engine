@@ -32,7 +32,7 @@ let reconnectAttempts = 0;
 let mockTickNumber = 0;
 
 function parseTimestamp(value: string | number | undefined): Date {
-  if (value === undefined || value === null || value === "") return new Date();
+  if (value === undefined || value === "") return new Date();
 
   if (typeof value === "number" || (typeof value === "string" && /^\d+(\.\d+)?$/.test(value))) {
     const numeric = Number(value);
