@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
@@ -147,9 +147,11 @@ authRouter.patch("/admin/merchants/:merchantId/kyc", async (req: Request, res: R
       res.status(404).json({ error: "Not found" });
       return;
     }
-    const configuredKey = process.env.ADMIN_API_KEY;
-    const suppliedKey = req.header("x-admin-api-key");
-    if (!configuredKey || !suppliedKey || suppliedKey !== configuredKey) {
+    const configuredKey = env.ADMIN_API_KEY;
+    const suppliedKey = req.header("x-admin-api-key") ?? "";
+    const expected = Buffer.from(configuredKey);
+    const supplied = Buffer.from(suppliedKey);
+    if (!configuredKey || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
       res.status(403).json({ error: "Admin authorization required" });
       return;
     }
