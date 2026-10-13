@@ -225,7 +225,7 @@
             }
           }
         },
-        "url": "{{baseUrl}}/api/auth/admin/merchants/{{merchantId}}/kyc"
+        "url": "{{baseUrl}}/api/kyc/admin/merchants/{{merchantId}}/kyc"
       },
       "event": [
         {
