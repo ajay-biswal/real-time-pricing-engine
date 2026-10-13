@@ -78,18 +78,18 @@ export async function updateMarketSnapshot(
   });
 
   try {
-    await redisClient.set(
-      `market:snapshot:${symbol}`,
-      JSON.stringify({
-        symbol: snapshot.symbol,
-        buy: snapshot.buy.toString(),
-        sell: snapshot.sell.toString(),
-        high24h: snapshot.high24h.toString(),
-        low24h: snapshot.low24h.toString(),
-        change24h: snapshot.change24h.toString(),
-        updatedAt: snapshot.updatedAt.toISOString(),
-      }),
-    );
+    const snapshotMessage = JSON.stringify({
+      symbol: snapshot.symbol,
+      buy: snapshot.buy.toString(),
+      sell: snapshot.sell.toString(),
+      high24h: snapshot.high24h.toString(),
+      low24h: snapshot.low24h.toString(),
+      change24h: snapshot.change24h.toString(),
+      updatedAt: snapshot.updatedAt.toISOString(),
+    });
+
+    await redisClient.set(`market:snapshot:${symbol}`, snapshotMessage);
+    await redisClient.publish("market:snapshot:updates", snapshotMessage);
   } catch (error) {
     console.error(`Failed to cache snapshot for ${symbol}:`, error);
   }
