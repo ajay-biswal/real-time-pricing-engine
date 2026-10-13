@@ -3,7 +3,7 @@ import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
-import { connectMarketData } from "./modules/market-data/market-data.client.js";
+import { closeMarketDataSocket, connectMarketData } from "./modules/market-data/market-data.client.js";
 import { shutdownMarketTickRepository } from "./modules/persistence/market-tick.repository.js";
 import type WebSocket from "ws";
 import {
@@ -16,9 +16,9 @@ let marketDataSocket: WebSocket | undefined;
 let shuttingDown = false;
 
 async function closeDependencies(): Promise<void> {
-  // Stop the source first; the repository then rejects any late-arriving ticks
-  // and flushes ticks already accepted into its in-memory queue.
-  marketDataSocket?.close();
+  // Stop the provider and drain already-accepted persistence operations before
+  // closing the repository's ingestion queue.
+  await closeMarketDataSocket(marketDataSocket);
   await shutdownMarketTickRepository();
 
   // Snapshot refreshes must finish before their Redis connection is closed.
