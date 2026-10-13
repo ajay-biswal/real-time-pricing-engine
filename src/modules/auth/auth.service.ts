@@ -1,12 +1,15 @@
-import { randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import jwt, { type JwtPayload } from "jsonwebtoken";
 import { Prisma } from "@prisma/client";
 import { redisClient } from "../../config/redis.js";
+import { env } from "../../config/env.js";
 import { authRepository } from "./auth.repository.js";
-import { hashPassword, verifyPassword } from "./password.js";
-import { hashSessionToken } from "./session-token.js";
+import { hashPassword, isLegacyPasswordHash, verifyPassword } from "./password.js";
 import type { LoginInput, RegisterInput } from "./auth.validation.js";
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 12;
+export const JWT_ISSUER = "real-time-pricing-engine";
+export const JWT_AUDIENCE = "pricing-engine-api";
 
 export class AuthServiceError extends Error {
   constructor(
@@ -17,6 +20,30 @@ export class AuthServiceError extends Error {
     super(message);
     this.name = "AuthServiceError";
   }
+}
+
+export interface AccessTokenClaims extends JwtPayload {
+  sub: string;
+  jti: string;
+}
+
+export function verifyAccessToken(token: string): AccessTokenClaims {
+  const payload = jwt.verify(token, env.JWT_SECRET, {
+    algorithms: ["HS256"],
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
+
+  if (
+    typeof payload === "string" ||
+    typeof payload.sub !== "string" ||
+    typeof payload.jti !== "string" ||
+    typeof payload.exp !== "number"
+  ) {
+    throw new AuthServiceError("Invalid access token", 401, "TOKEN_INVALID");
+  }
+
+  return payload as AccessTokenClaims;
 }
 
 export const authService = {
@@ -40,14 +67,28 @@ export const authService = {
       throw new AuthServiceError("Account is suspended", 403, "ACCOUNT_SUSPENDED");
     }
 
-    const token = randomBytes(32).toString("base64url");
-    await redisClient.set(`auth:session:${hashSessionToken(token)}`, merchant.id, {
-      EX: SESSION_TTL_SECONDS,
+    // Upgrade accounts created with the former scrypt implementation after a successful login.
+    if (isLegacyPasswordHash(merchant.passwordHash)) {
+      await authRepository.updatePasswordHash(merchant.id, await hashPassword(input.password));
+    }
+
+    const jti = randomUUID();
+    const token = jwt.sign({ jti }, env.JWT_SECRET, {
+      algorithm: "HS256",
+      subject: merchant.id,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      expiresIn: SESSION_TTL_SECONDS,
     });
+
     return { merchant, token };
   },
 
   async logout(token: string): Promise<void> {
-    await redisClient.del(`auth:session:${hashSessionToken(token)}`);
+    const claims = verifyAccessToken(token);
+    const remainingSeconds = claims.exp! - Math.floor(Date.now() / 1000);
+    if (remainingSeconds <= 0) return;
+
+    await redisClient.set(`auth:revoked:${claims.jti}`, "1", { EX: remainingSeconds });
   },
 };
