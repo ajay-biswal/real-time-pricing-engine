@@ -4,6 +4,7 @@ import WebSocket from "ws";
 import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
+import { ingestionLatency, snapshotLatency } from "./modules/common/latency-metrics.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
 
 import {
@@ -20,6 +21,7 @@ import {
 const server = createServer(app);
 let marketDataSocket: WebSocket | undefined;
 let shuttingDown = false;
+let metricsTimer: ReturnType<typeof setInterval> | undefined;
 
 async function closeDependencies(): Promise<void> {
   // Stop the provider and drain already-accepted persistence operations before
@@ -45,6 +47,7 @@ async function closeDependencies(): Promise<void> {
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (metricsTimer) clearInterval(metricsTimer);
 
   console.log(`${signal} received. Shutting down gracefully...`);
 
@@ -89,6 +92,13 @@ async function main(): Promise<void> {
 
     server.listen(env.PORT, "0.0.0.0", () => {
       console.log(`HTTP server listening on port ${env.PORT}`);
+      metricsTimer = setInterval(() => {
+        console.log("Latency metrics", {
+          ingestion: ingestionLatency.report(),
+          snapshot: snapshotLatency.report(),
+        });
+      }, 10_000);
+      metricsTimer.unref();
     });
   } catch (error) {
     console.error("Application startup failed:", error);
