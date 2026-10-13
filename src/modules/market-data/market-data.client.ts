@@ -18,17 +18,11 @@ const MARKET_SYMBOLS = [
 
 let marketDataStopping = false;
 const inFlightPersists = new Set<Promise<void>>();
-let mockMarketDataTimer: ReturnType<typeof setInterval> | undefined;
 
 export async function closeMarketDataSocket(
   socket: WebSocket | undefined,
 ): Promise<void> {
   marketDataStopping = true;
-  if (mockMarketDataTimer) {
-    clearInterval(mockMarketDataTimer);
-    mockMarketDataTimer = undefined;
-  }
-
   if (socket && socket.readyState !== WebSocket.CLOSED) {
     await new Promise<void>((resolve) => {
       if (socket.readyState === WebSocket.CLOSED) return resolve();
@@ -43,79 +37,8 @@ export async function closeMarketDataSocket(
 
 const timestampSamplesLogged: Record<string, number> = {};
 
-function mockInitialPrice(symbol: string): number {
-  if (symbol.startsWith("BTC")) return 65000;
-  if (symbol.startsWith("ETH")) return 3200;
-  if (symbol.startsWith("BNB")) return 580;
-  if (symbol.startsWith("SOL")) return 150;
-  if (symbol.startsWith("XAU")) return 2650;
-  if (symbol.startsWith("XAG")) return 31;
-  if (symbol.endsWith("JPY")) return 150;
-  if (symbol.endsWith("TRY")) return 34;
-  if (symbol.endsWith("ZAR")) return 18;
-  if (symbol.endsWith("MXN")) return 18;
-  if (symbol.endsWith("NOK") || symbol.endsWith("SEK")) return 10.5;
-  if (symbol.endsWith("CNH")) return 7.2;
-  if (symbol.endsWith("USD") || symbol.startsWith("USD")) return 1.08;
-  return 1.25;
-}
-
-/**
- * Deterministic-shape synthetic feed for development and reproducible pipeline
- * validation. It is not real market data and must never be used for trading.
- */
-function startMockMarketData(): void {
-  const prices = new Map<string, number>(
-    MARKET_SYMBOLS.map((symbol): [string, number] => [symbol, mockInitialPrice(symbol)]),
-  );
-  console.warn(
-    `Starting MOCK market-data feed for ${MARKET_SYMBOLS.length} symbols; values are synthetic, not live market prices.`,
-  );
-
-  const publishBatch = () => {
-    if (marketDataStopping) return;
-    const timestamp = new Date();
-
-    for (const symbol of MARKET_SYMBOLS) {
-      const previous = prices.get(symbol) ?? mockInitialPrice(symbol);
-      const volatility = /BTC|ETH|BNB|SOL|XRP|ADA|DOG|DOT|LTC|BCH|XLM|TRX|UNI|FIL|AVX/.test(symbol)
-        ? 0.0008
-        : 0.00008;
-      const mid = Math.max(0.000001, previous * (1 + (Math.random() - 0.5) * volatility));
-      prices.set(symbol, mid);
-
-      const spread = mid * (symbol.endsWith("USD") && /BTC|ETH|BNB|SOL|XRP|ADA|DOG|DOT|LTC|BCH|XLM|TRX|UNI|FIL|AVX/.test(symbol)
-        ? 0.0005
-        : 0.00002);
-
-      const persist = saveMarketTick({
-        symbol,
-        buy: mid - spread / 2,
-        sell: mid + spread / 2,
-        timestamp,
-      })
-        .catch((error: unknown) => {
-          if (!marketDataStopping) {
-            console.error(`Failed to accept mock tick for ${symbol}:`, error);
-          }
-        })
-        .finally(() => inFlightPersists.delete(persist));
-
-      inFlightPersists.add(persist);
-    }
-  };
-
-  publishBatch();
-  mockMarketDataTimer = setInterval(publishBatch, 1000);
-}
-
 export function connectMarketData(): WebSocket | undefined {
   marketDataStopping = false;
-
-  if (env.MARKET_DATA_MODE === "mock") {
-    startMockMarketData();
-    return undefined;
-  }
 
   if (!env.MARKET_API_KEY || !env.MARKET_SECRET_KEY) {
     throw new Error("Market API credentials are missing");
@@ -174,7 +97,7 @@ export function connectMarketData(): WebSocket | undefined {
         timestamp?: string | number;
       };
 
-      const eventName = "event" in data ? String(data.event) : "unknown";
+      const eventName = String(data.event);
       const sampleCount = timestampSamplesLogged[eventName] ?? 0;
       if (
         (eventName === "marketPriceSnapshot" || eventName === "marketPriceUpdate") &&
@@ -185,6 +108,7 @@ export function connectMarketData(): WebSocket | undefined {
           payload: data,
           receivedAt: new Date().toISOString(),
         });
+
         timestampSamplesLogged[eventName] = sampleCount + 1;
       }
 
