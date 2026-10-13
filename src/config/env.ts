@@ -9,15 +9,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 
   MARKET_WS_URL: z.string().url(),
-
   MARKET_API_KEY: z.string().default(""),
   MARKET_SECRET_KEY: z.string().default(""),
 
-  MONGODB_URI: z.string().url(),
-  MONGODB_DATABASE: z.string().min(1),
-
   DATABASE_URL: z.string().url(),
-
   REDIS_URL: z.string().url(),
 });
 
