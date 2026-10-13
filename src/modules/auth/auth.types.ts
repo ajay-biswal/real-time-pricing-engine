@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 
-export type MerchantRole = "MERCHANT";
+export type MerchantRole = "MERCHANT" | "ADMIN";
 export type AccountStatus = "ACTIVE" | "SUSPENDED";
 export type KycStatus = "NOT_SUBMITTED" | "PENDING" | "VERIFIED" | "REJECTED";
 
