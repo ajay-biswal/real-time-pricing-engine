@@ -4,7 +4,12 @@ import WebSocket from "ws";
 import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
-import { ingestionLatency, snapshotLatency } from "./modules/common/latency-metrics.js";
+import {
+  databaseBatchWriteLatency,
+  ingestionLatency,
+  queueWaitLatency,
+  snapshotLatency,
+} from "./modules/common/latency-metrics.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
 
 import {
@@ -18,6 +23,7 @@ import {
   attachClientWebSocket,
   closeClientWebSocket,
 } from "./modules/distribution/client-ws.server.js";
+
 const server = createServer(app);
 let marketDataSocket: WebSocket | undefined;
 let shuttingDown = false;
@@ -77,8 +83,6 @@ async function shutdown(signal: string): Promise<void> {
   }
 }
 
-
-
 async function main(): Promise<void> {
   try {
     await prisma.$connect();
@@ -94,6 +98,8 @@ async function main(): Promise<void> {
       console.log(`HTTP server listening on port ${env.PORT}`);
       metricsTimer = setInterval(() => {
         console.log("Latency metrics", {
+          queueWait: queueWaitLatency.report(),
+          databaseBatchWrite: databaseBatchWriteLatency.report(),
           ingestion: ingestionLatency.report(),
           snapshot: snapshotLatency.report(),
         });

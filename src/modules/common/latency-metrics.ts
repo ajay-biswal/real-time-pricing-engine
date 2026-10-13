@@ -45,6 +45,9 @@ export class LatencyMetrics {
   }
 }
 
+export const queueWaitLatency = new LatencyMetrics();
+// One sample per createMany() batch, not per individual tick.
+export const databaseBatchWriteLatency = new LatencyMetrics();
 export const ingestionLatency = new LatencyMetrics();
 export const snapshotLatency = new LatencyMetrics();
 
