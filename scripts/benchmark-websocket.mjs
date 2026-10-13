@@ -28,6 +28,7 @@ const tickAgeSamples = [];
 const frameBytes = [];
 let updates = 0;
 let snapshots = 0;
+const symbolsWithData = new Set();
 let invalidTimestamps = 0;
 let socket;
 
@@ -61,6 +62,7 @@ socket.on("message", (raw) => {
 
   // Measure the exact UTF-8 JSON frame size received by this client.
   frameBytes.push(Buffer.byteLength(raw.toString(), "utf8"));
+  symbolsWithData.add(message.data.symbol);
   if (message.event === "marketPriceSnapshot") snapshots += 1;
   if (message.event === "marketPriceUpdate") updates += 1;
 
@@ -102,6 +104,10 @@ socket.on("close", () => {
   });
   const report = {
     symbolsSubscribed: symbols.length,
+    symbolsWithData: symbolsWithData.size,
+    symbolsReceivingData: [...symbolsWithData].sort(),
+    symbolsWithoutData: symbols.filter((symbol) => !symbolsWithData.has(symbol)),
+    allSubscribedSymbolsReceivedData: symbols.every((symbol) => symbolsWithData.has(symbol)),
     durationSeconds,
     updatesReceived: updates,
     initialSnapshotsReceived: snapshots,
@@ -117,7 +123,7 @@ socket.on("close", () => {
     distributionLatencyMs: summarize(distribution),
     tickToClientAgeMs: summarize(tickAge),
     distributionMeets50ms: distribution.length > 0 && percentile(distribution, 0.95) <= 50,
-    note: "Frame sizes are measured on actual individual JSON frames, not as one combined 61-symbol snapshot. Distribution latency is publication-to-receipt. Tick age is not true provider-event latency unless updatedAt originates from the provider and shares the host clock.",
+    note: "Frame sizes are measured on actual individual JSON frames, not as one combined 61-symbol snapshot. Distribution latency is publication-to-receipt. Tick age is not true provider-event latency unless updatedAt originates from the provider and shares the host clock. Symbol coverage means the downstream client received at least one snapshot or update per symbol during this run; it does not prove upstream completeness beyond the observation window.",
   };
   console.log(JSON.stringify(report, null, 2));
   if (distribution.length === 0) process.exitCode = 1;
