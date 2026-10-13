@@ -1,12 +1,13 @@
 import { performance } from "node:perf_hooks";
 import { prisma } from "../../config/prisma.js";
 import {
+  databaseBatchWriteLatency,
   elapsedMs,
   ingestionLatency,
+  queueWaitLatency,
   snapshotLatency,
 } from "../common/latency-metrics.js";
 import { updateMarketSnapshot } from "../pricing/pricing.service.js";
-
 
 export interface MarketTickInput {
   symbol: string;
@@ -72,15 +73,28 @@ async function flushPendingTicks(): Promise<void> {
   flushPromise = (async () => {
     while (pendingTicks.length > 0) {
       const batch = pendingTicks.splice(0, MAX_BATCH_SIZE);
+      const batchStartedAt = performance.now();
+
+      for (const item of batch) {
+        queueWaitLatency.record(batchStartedAt - item.acceptedAt);
+      }
+
       try {
-        await prisma.marketTick.createMany({
-          data: batch.map(({ tick }) => ({
-            symbol: tick.symbol,
-            buy: tick.buy,
-            sell: tick.sell,
-            timestamp: tick.timestamp,
-          })),
-        });
+        const dbStartedAt = performance.now();
+        try {
+          await prisma.marketTick.createMany({
+            data: batch.map(({ tick }) => ({
+              symbol: tick.symbol,
+              buy: tick.buy,
+              sell: tick.sell,
+              timestamp: tick.timestamp,
+            })),
+          });
+        } finally {
+          // One sample per batch; includes Prisma/client overhead and the
+          // database round trip, not just PostgreSQL execution time.
+          databaseBatchWriteLatency.record(elapsedMs(dbStartedAt));
+        }
 
         for (const item of batch) {
           ingestionLatency.record(elapsedMs(item.acceptedAt));
