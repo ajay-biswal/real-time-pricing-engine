@@ -1,16 +1,22 @@
 import { createServer } from "node:http";
+import WebSocket from "ws";
+
 import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
-import { closeMarketDataSocket, connectMarketData } from "./modules/market-data/market-data.client.js";
+
+import {
+  closeMarketDataSocket,
+  connectMarketData,
+} from "./modules/market-data/market-data.client.js";
+
 import { shutdownMarketTickRepository } from "./modules/persistence/market-tick.repository.js";
-import WebSocket from "ws";
+
 import {
   attachClientWebSocket,
   closeClientWebSocket,
 } from "./modules/distribution/client-ws.server.js";
-
 const server = createServer(app);
 let marketDataSocket: WebSocket | undefined;
 let shuttingDown = false;
@@ -67,6 +73,8 @@ async function shutdown(signal: string): Promise<void> {
     process.exit(1);
   }
 }
+
+
 
 async function main(): Promise<void> {
   try {
