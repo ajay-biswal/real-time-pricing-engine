@@ -46,7 +46,7 @@ function toSnapshot(values: NonNullable<ReturnType<RollingPricingWindow["snapsho
 /** Serialize Redis writes per symbol so an older asynchronous publish cannot overwrite a newer snapshot. */
 async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
   const previous = publishQueues.get(snapshot.symbol) ?? Promise.resolve();
-  const current = previous
+  const current: Promise<void> = previous
     .catch(() => undefined)
     .then(async () => {
       const message = JSON.stringify(snapshot);
@@ -55,14 +55,14 @@ async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
     })
     .catch((error: unknown) => {
       console.error(`Failed to publish in-memory snapshot for ${snapshot.symbol}:`, error);
-    })
-    .finally(() => {
-      if (publishQueues.get(snapshot.symbol) === current) {
-        publishQueues.delete(snapshot.symbol);
-      }
     });
 
   publishQueues.set(snapshot.symbol, current);
+  void current.then(() => {
+    if (publishQueues.get(snapshot.symbol) === current) {
+      publishQueues.delete(snapshot.symbol);
+    }
+  });
   await current;
 }
 
