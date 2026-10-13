@@ -71,7 +71,25 @@ interface AuthenticationMessage {
   success: boolean;
 }
 
+let marketDataStopping = false;
+const inFlightPersists = new Set<Promise<void>>();
+
+export async function closeMarketDataSocket(socket: WebSocket | undefined): Promise<void> {
+  marketDataStopping = true;
+  if (socket && socket.readyState !== WebSocket.CLOSED) {
+    await new Promise<void>((resolve) => {
+      if (socket.readyState === WebSocket.CLOSED) return resolve();
+      socket.once("close", () => resolve());
+      socket.close(1000, "Application shutting down");
+    });
+  }
+  while (inFlightPersists.size > 0) {
+    await Promise.allSettled([...inFlightPersists]);
+  }
+}
+
 export function connectMarketData(): WebSocket {
+  marketDataStopping = false;
   if (!env.MARKET_API_KEY || !env.MARKET_SECRET_KEY) {
     throw new Error("Market API credentials are missing");
   }
@@ -170,14 +188,22 @@ export function connectMarketData(): WebSocket {
         return;
       }
 
-      void saveMarketTick({
+      if (marketDataStopping) return;
+
+      const persist = saveMarketTick({
         symbol: tick.symbol,
         buy: tick.bid,
         sell: tick.ask,
         timestamp,
       }).catch((error: unknown) => {
-        console.error("Failed to persist market tick:", error);
+        if (!marketDataStopping) {
+          console.error("Failed to persist market tick:", error);
+        }
+      }).finally(() => {
+        inFlightPersists.delete(persist);
       });
+
+      inFlightPersists.add(persist);
 
       return;
     }
