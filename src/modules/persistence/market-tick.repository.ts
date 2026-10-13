@@ -20,21 +20,25 @@ const SNAPSHOT_COALESCE_MS = 500;
 
 const pendingTicks: PendingTick[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
-let flushInProgress = false;
+let flushPromise: Promise<void> | undefined;
+let acceptingTicks = true;
 const snapshotTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const snapshotInProgress = new Set<string>();
+const snapshotInProgress = new Map<string, Promise<void>>();
 const snapshotPending = new Set<string>();
 
 export function saveMarketTick(tick: MarketTickInput): Promise<void> {
+  if (!acceptingTicks) {
+    return Promise.reject(new Error("Market tick ingestion is shutting down"));
+  }
+
   const promise = new Promise<void>((resolve, reject) => {
     pendingTicks.push({ tick, resolve, reject });
   });
 
   if (pendingTicks.length >= MAX_BATCH_SIZE) {
-    if (flushTimer) clearTimeout(flushTimer);
-    flushTimer = undefined;
+    clearFlushTimer();
     void flushPendingTicks();
-  } else if (!flushTimer && !flushInProgress) {
+  } else if (!flushTimer) {
     flushTimer = setTimeout(() => {
       flushTimer = undefined;
       void flushPendingTicks();
@@ -44,48 +48,56 @@ export function saveMarketTick(tick: MarketTickInput): Promise<void> {
   return promise;
 }
 
+function clearFlushTimer(): void {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = undefined;
+}
+
 async function flushPendingTicks(): Promise<void> {
-  if (flushInProgress || pendingTicks.length === 0) return;
-  flushInProgress = true;
+  if (flushPromise) {
+    await flushPromise;
+    if (pendingTicks.length > 0) await flushPendingTicks();
+    return;
+  }
+  if (pendingTicks.length === 0) return;
 
-  const batch = pendingTicks.splice(0, MAX_BATCH_SIZE);
-  try {
-    await prisma.marketTick.createMany({
-      data: batch.map(({ tick }) => ({
-        symbol: tick.symbol,
-        buy: tick.buy,
-        sell: tick.sell,
-        timestamp: tick.timestamp,
-      })),
-    });
+  flushPromise = (async () => {
+    while (pendingTicks.length > 0) {
+      const batch = pendingTicks.splice(0, MAX_BATCH_SIZE);
+      try {
+        await prisma.marketTick.createMany({
+          data: batch.map(({ tick }) => ({
+            symbol: tick.symbol,
+            buy: tick.buy,
+            sell: tick.sell,
+            timestamp: tick.timestamp,
+          })),
+        });
 
-    for (const item of batch) item.resolve();
-    for (const symbol of new Set(batch.map(({ tick }) => tick.symbol))) {
-      scheduleSnapshotRefresh(symbol);
-    }
-  } catch (error) {
-    for (const item of batch) item.reject(error);
-    console.error(`Failed to persist batch of ${batch.length} market ticks:`, error);
-  } finally {
-    flushInProgress = false;
-    if (pendingTicks.length > 0) {
-      if (pendingTicks.length >= MAX_BATCH_SIZE) {
-        void flushPendingTicks();
-      } else if (!flushTimer) {
-        flushTimer = setTimeout(() => {
-          flushTimer = undefined;
-          void flushPendingTicks();
-        }, BATCH_INTERVAL_MS);
+        for (const item of batch) item.resolve();
+        for (const symbol of new Set(batch.map(({ tick }) => tick.symbol))) {
+          scheduleSnapshotRefresh(symbol);
+        }
+      } catch (error) {
+        for (const item of batch) item.reject(error);
+        console.error(`Failed to persist batch of ${batch.length} market ticks:`, error);
       }
     }
+  })();
+
+  try {
+    await flushPromise;
+  } finally {
+    flushPromise = undefined;
   }
+
+  if (pendingTicks.length > 0) await flushPendingTicks();
 }
 
 function scheduleSnapshotRefresh(symbol: string): void {
   const existing = snapshotTimers.get(symbol);
   if (existing) clearTimeout(existing);
 
-  // Coalesce bursts: refresh a symbol at most once per coalescing window.
   snapshotTimers.set(symbol, setTimeout(() => {
     snapshotTimers.delete(symbol);
     void refreshSnapshot(symbol);
@@ -93,20 +105,62 @@ function scheduleSnapshotRefresh(symbol: string): void {
 }
 
 async function refreshSnapshot(symbol: string): Promise<void> {
-  if (snapshotInProgress.has(symbol)) {
+  const current = snapshotInProgress.get(symbol);
+  if (current) {
     snapshotPending.add(symbol);
+    await current;
     return;
   }
 
-  snapshotInProgress.add(symbol);
+  const work = (async () => {
+    do {
+      snapshotPending.delete(symbol);
+      try {
+        await updateMarketSnapshot(symbol);
+      } catch (error) {
+        console.error(`Failed to refresh market snapshot for ${symbol}:`, error);
+      }
+    } while (snapshotPending.has(symbol));
+  })();
+
+  snapshotInProgress.set(symbol, work);
   try {
-    await updateMarketSnapshot(symbol);
-  } catch (error) {
-    console.error(`Failed to refresh market snapshot for ${symbol}:`, error);
+    await work;
   } finally {
     snapshotInProgress.delete(symbol);
-    if (snapshotPending.delete(symbol)) {
-      void refreshSnapshot(symbol);
+    if (snapshotPending.has(symbol)) await refreshSnapshot(symbol);
+  }
+}
+
+/**
+ * Stop accepting new ticks, persist all queued ticks, then refresh every
+ * affected snapshot before Redis and PostgreSQL are disconnected.
+ */
+export async function shutdownMarketTickRepository(): Promise<void> {
+  acceptingTicks = false;
+  clearFlushTimer();
+
+  await flushPendingTicks();
+
+  for (const [symbol, timer] of snapshotTimers) {
+    clearTimeout(timer);
+    snapshotTimers.delete(symbol);
+    snapshotPending.add(symbol);
+  }
+
+  const symbolsToRefresh = new Set([
+    ...snapshotPending,
+    ...snapshotInProgress.keys(),
+  ]);
+
+  await Promise.all([...symbolsToRefresh].map((symbol) => refreshSnapshot(symbol)));
+
+  // A refresh may have been requested while another refresh was running.
+  while (snapshotInProgress.size > 0 || snapshotPending.size > 0) {
+    await Promise.all([...snapshotInProgress.values()]);
+    const pending = [...snapshotPending];
+    if (pending.length > 0) {
+      await Promise.all(pending.map((symbol) => refreshSnapshot(symbol)));
     }
   }
 }
