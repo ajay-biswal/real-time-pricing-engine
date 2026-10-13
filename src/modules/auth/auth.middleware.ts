@@ -54,6 +54,20 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 }
 
+export function requireRole(...allowedRoles: Array<MerchantRecord["role"]>) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.merchant) {
+      res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
+      return;
+    }
+    if (!allowedRoles.includes(req.merchant.role)) {
+      res.status(403).json({ error: "Insufficient permissions", code: "FORBIDDEN" });
+      return;
+    }
+    next();
+  };
+}
+
 export function requireVerifiedMerchant(req: Request, res: Response, next: NextFunction): void {
   if (!req.merchant) {
     res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
