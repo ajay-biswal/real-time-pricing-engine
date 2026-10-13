@@ -7,6 +7,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum MerchantRole {
+  MERCHANT
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model Merchant {
+  id                   String        @id @default(cuid())
+  email                String        @unique @db.VarChar(254)
+  passwordHash         String
+  role                 MerchantRole  @default(MERCHANT)
+  accountStatus        AccountStatus @default(ACTIVE)
+  kycStatus            KycStatus     @default(NOT_SUBMITTED)
+  kycApplicantName     String?       @db.VarChar(120)
+  kycDocumentType      String?       @db.VarChar(32)
+  kycProviderReference String?       @db.VarChar(200)
+  kycSubmittedAt       DateTime?     @db.Timestamptz(3)
+  kycVerifiedAt        DateTime?     @db.Timestamptz(3)
+  kycRejectionReason   String?       @db.VarChar(500)
+  createdAt            DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([kycStatus, createdAt])
+}
+
 model MarketTick {
   id        BigInt   @id @default(autoincrement())
   symbol    String   @db.VarChar(20)
@@ -15,6 +51,7 @@ model MarketTick {
   timestamp DateTime @db.Timestamptz(3)
 
   @@index([symbol, timestamp])
+  @@unique([symbol, timestamp, buy, sell])
 }
 
 model MarketSnapshot {

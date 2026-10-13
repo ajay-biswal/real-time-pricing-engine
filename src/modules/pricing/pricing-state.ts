@@ -18,6 +18,7 @@ export interface PricingSnapshot {
 }
 
 const states = new Map<string, RollingPricingWindow>();
+const publishQueues = new Map<string, Promise<void>>();
 let initialized = false;
 
 function windowFor(symbol: string): RollingPricingWindow {
@@ -42,14 +43,27 @@ function toSnapshot(values: NonNullable<ReturnType<RollingPricingWindow["snapsho
   };
 }
 
+/** Serialize Redis writes per symbol so an older asynchronous publish cannot overwrite a newer snapshot. */
 async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
-  const message = JSON.stringify(snapshot);
-  try {
-    await redisClient.set(`market:snapshot:${snapshot.symbol}`, message);
-    await redisClient.publish(SNAPSHOT_CHANNEL, message);
-  } catch (error) {
-    console.error(`Failed to publish in-memory snapshot for ${snapshot.symbol}:`, error);
-  }
+  const previous = publishQueues.get(snapshot.symbol) ?? Promise.resolve();
+  const current: Promise<void> = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const message = JSON.stringify(snapshot);
+      await redisClient.set(`market:snapshot:${snapshot.symbol}`, message);
+      await redisClient.publish(SNAPSHOT_CHANNEL, message);
+    })
+    .catch((error: unknown) => {
+      console.error(`Failed to publish in-memory snapshot for ${snapshot.symbol}:`, error);
+    });
+
+  publishQueues.set(snapshot.symbol, current);
+  void current.then(() => {
+    if (publishQueues.get(snapshot.symbol) === current) {
+      publishQueues.delete(snapshot.symbol);
+    }
+  });
+  await current;
 }
 
 /**

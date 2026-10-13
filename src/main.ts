@@ -32,12 +32,8 @@ let shuttingDown = false;
 let metricsTimer: ReturnType<typeof setInterval> | undefined;
 
 async function closeDependencies(): Promise<void> {
-  // Stop the provider and drain already-accepted persistence operations before
-  // closing the repository's ingestion queue.
   await closeMarketDataSocket(marketDataSocket);
   await shutdownMarketTickRepository();
-
-  // All accepted persistence operations have drained before dependencies close.
   await closeClientWebSocket();
 
   const results = await Promise.allSettled([
@@ -66,8 +62,6 @@ async function shutdown(signal: string): Promise<void> {
   timeout.unref();
 
   try {
-    // Stop accepting new HTTP connections immediately. Closing WebSockets
-    // below allows this promise to settle instead of waiting indefinitely.
     const serverClosed = new Promise<void>((resolve) => {
       server.close(() => resolve());
     });
