@@ -13,7 +13,10 @@ export class KycServiceError extends Error {
 export const kycService = {
   async submit(merchantId: string, currentStatus: string, input: KycSubmissionInput) {
     if (currentStatus === "VERIFIED") {
-      throw new KycServiceError("KYC is already verified", 409);
+      throw new KycServiceError("KYC is already verified", 409, "KYC_ALREADY_VERIFIED");
+    }
+    if (currentStatus === "PENDING") {
+      throw new KycServiceError("A KYC application is already pending review", 409, "KYC_ALREADY_PENDING");
     }
     return kycRepository.submit(merchantId, input);
   },
