@@ -1,21 +1,75 @@
 import WebSocket from "ws";
 import { env } from "../../config/env.js";
+import { saveMarketTick } from "../persistence/market-tick.repository.js";
 
 const MARKET_SYMBOLS = [
-  "AUDUSD", "AUDCAD", "AUDCHF", "AUDJPY", "AUDNZD",
-  "AUDSGD", "CADCHF", "CADJPY", "CHFJPY", "CHFSGD",
-  "EURAUD", "EURCAD", "EURCHF", "EURGBP", "EURJPY",
-  "EURNZD", "EURUSD", "GBPAUD", "GBPCAD", "GBPCHF",
-  "GBPJPY", "GBPNZD", "GBPUSD", "NZDCAD", "NZDCHF",
-  "NZDJPY", "NZDUSD", "USDCAD", "USDCHF", "USDCNH",
-  "USDJPY", "USDMXN", "USDNOK", "USDPLN", "USDSEK",
-  "USDSGD", "USDTRY", "USDZAR", "EURTRY", "GBPTRY",
-  "NOKJPY", "SEKJPY", "SGDJPY", "ZARJPY", "XAUUSD",
-  "XAGUSD", "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD",
-  "XRPUSD", "ADAUSD", "DOGUSD", "DOTUSD", "LTCUSD",
-  "BCHUSD", "XLMUSD", "TRXUSD", "UNIUSD", "FILUSD",
+  "AUDUSD",
+  "AUDCAD",
+  "AUDCHF",
+  "AUDJPY",
+  "AUDNZD",
+  "AUDSGD",
+  "CADCHF",
+  "CADJPY",
+  "CHFJPY",
+  "CHFSGD",
+  "EURAUD",
+  "EURCAD",
+  "EURCHF",
+  "EURGBP",
+  "EURJPY",
+  "EURNZD",
+  "EURUSD",
+  "GBPAUD",
+  "GBPCAD",
+  "GBPCHF",
+  "GBPJPY",
+  "GBPNZD",
+  "GBPUSD",
+  "NZDCAD",
+  "NZDCHF",
+  "NZDJPY",
+  "NZDUSD",
+  "USDCAD",
+  "USDCHF",
+  "USDCNH",
+  "USDJPY",
+  "USDMXN",
+  "USDNOK",
+  "USDPLN",
+  "USDSEK",
+  "USDSGD",
+  "USDTRY",
+  "USDZAR",
+  "EURTRY",
+  "GBPTRY",
+  "NOKJPY",
+  "SEKJPY",
+  "SGDJPY",
+  "ZARJPY",
+  "XAUUSD",
+  "XAGUSD",
+  "BTCUSD",
+  "ETHUSD",
+  "BNBUSD",
+  "SOLUSD",
+  "XRPUSD",
+  "ADAUSD",
+  "DOGUSD",
+  "DOTUSD",
+  "LTCUSD",
+  "BCHUSD",
+  "XLMUSD",
+  "TRXUSD",
+  "UNIUSD",
+  "FILUSD",
   "AVXUSD",
 ];
+
+interface AuthenticationMessage {
+  event: string;
+  success: boolean;
+}
 
 export function connectMarketData(): WebSocket {
   if (!env.MARKET_API_KEY || !env.MARKET_SECRET_KEY) {
@@ -23,6 +77,8 @@ export function connectMarketData(): WebSocket {
   }
 
   const ws = new WebSocket(env.MARKET_WS_URL);
+
+  let authenticated = false;
 
   ws.on("open", () => {
     console.log("Connected to market data provider");
@@ -34,6 +90,8 @@ export function connectMarketData(): WebSocket {
         secret: env.MARKET_SECRET_KEY,
       }),
     );
+
+    console.log("Market data authentication request sent");
   });
 
   ws.on("message", (rawData) => {
@@ -48,10 +106,83 @@ export function connectMarketData(): WebSocket {
       return;
     }
 
-    console.log("Provider message:", data);
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "event" in data &&
+      data.event === "authenticated" &&
+      "success" in data &&
+      data.success === true
+    ) {
+      if (authenticated) {
+        return;
+      }
 
-    // Subscribe only after confirming successful authentication.
-    // The actual authentication response format must be verified.
+      authenticated = true;
+
+      console.log("Market data authentication successful");
+
+      ws.send(
+        JSON.stringify({
+          action: "subscribeMarketPrice",
+          symbols: MARKET_SYMBOLS,
+        }),
+      );
+
+      console.log(
+        `Market price subscription request sent for ${MARKET_SYMBOLS.length} symbols`,
+      );
+
+      return;
+    }
+
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "event" in data &&
+      (data.event === "marketPriceSnapshot" ||
+        data.event === "marketPriceUpdate") &&
+      "symbol" in data &&
+      "bid" in data &&
+      "ask" in data
+    ) {
+      const tick = data as {
+        symbol: string;
+        bid: number;
+        ask: number;
+        timestamp?: string | number;
+      };
+
+      const timestamp =
+        tick.timestamp === undefined || tick.timestamp === null
+          ? new Date()
+          : new Date(tick.timestamp);
+
+      if (
+        typeof tick.symbol !== "string" ||
+        typeof tick.bid !== "number" ||
+        typeof tick.ask !== "number" ||
+        !Number.isFinite(tick.bid) ||
+        !Number.isFinite(tick.ask) ||
+        Number.isNaN(timestamp.getTime())
+      ) {
+        console.error("Invalid market tick received");
+        return;
+      }
+
+      void saveMarketTick({
+        symbol: tick.symbol,
+        buy: tick.bid,
+        sell: tick.ask,
+        timestamp,
+      }).catch((error: unknown) => {
+        console.error("Failed to persist market tick:", error);
+      });
+
+      return;
+    }
+
+    console.log("Provider message:", data);
   });
 
   ws.on("error", (error) => {
@@ -59,9 +190,7 @@ export function connectMarketData(): WebSocket {
   });
 
   ws.on("close", (code, reason) => {
-    console.log(
-      `Market WebSocket closed: ${code} ${reason.toString()}`,
-    );
+    console.log(`Market WebSocket closed: ${code} ${reason.toString()}`);
   });
 
   return ws;
