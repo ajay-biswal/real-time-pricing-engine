@@ -69,7 +69,7 @@ export function getCurrentMerchant(req: Request, res: Response): void {
 }
 
 export async function logoutMerchant(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const match = req.header("authorization")?.match(/^Bearer\\s+(.+)$/i);
+  const match = req.header("authorization")?.match(/^Bearer\s+(.+)$/i);
   if (!match?.[1]) {
     res.status(401).json({ error: "Authentication required" });
     return;
