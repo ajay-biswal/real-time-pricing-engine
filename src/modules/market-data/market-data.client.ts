@@ -65,7 +65,9 @@ function mockInitialPrice(symbol: string): number {
  * validation. It is not real market data and must never be used for trading.
  */
 function startMockMarketData(): void {
-  const prices = new Map(MARKET_SYMBOLS.map((symbol) => [symbol, mockInitialPrice(symbol)]));
+  const prices = new Map<string, number>(
+    MARKET_SYMBOLS.map((symbol): [string, number] => [symbol, mockInitialPrice(symbol)]),
+  );
   console.warn(
     `Starting MOCK market-data feed for ${MARKET_SYMBOLS.length} symbols; values are synthetic, not live market prices.`,
   );
