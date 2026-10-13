@@ -1,11 +1,14 @@
 import { performance } from "node:perf_hooks";
 import { prisma } from "../../config/prisma.js";
 import {
+  batchSizeMetrics,
   databaseBatchWriteLatency,
   elapsedMs,
   ingestionLatency,
   queueWaitLatency,
+  recordFlushReason,
   snapshotLatency,
+  type FlushReason,
 } from "../common/latency-metrics.js";
 import { updateMarketSnapshot } from "../pricing/pricing.service.js";
 
@@ -26,6 +29,7 @@ interface PendingTick {
 const BATCH_INTERVAL_MS = 50;
 const MAX_BATCH_SIZE = 250;
 const SNAPSHOT_COALESCE_MS = 50;
+const SLOW_DATABASE_BATCH_MS = 50;
 
 const pendingTicks: PendingTick[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -46,11 +50,11 @@ export function saveMarketTick(tick: MarketTickInput): Promise<void> {
 
   if (pendingTicks.length >= MAX_BATCH_SIZE) {
     clearFlushTimer();
-    void flushPendingTicks();
+    void flushPendingTicks("max-size");
   } else if (!flushTimer) {
     flushTimer = setTimeout(() => {
       flushTimer = undefined;
-      void flushPendingTicks();
+      void flushPendingTicks("timer");
     }, BATCH_INTERVAL_MS);
   }
 
@@ -62,10 +66,10 @@ function clearFlushTimer(): void {
   flushTimer = undefined;
 }
 
-async function flushPendingTicks(): Promise<void> {
+async function flushPendingTicks(reason: FlushReason = "drain"): Promise<void> {
   if (flushPromise) {
     await flushPromise;
-    if (pendingTicks.length > 0) await flushPendingTicks();
+    if (pendingTicks.length > 0) await flushPendingTicks("drain");
     return;
   }
   if (pendingTicks.length === 0) return;
@@ -75,10 +79,13 @@ async function flushPendingTicks(): Promise<void> {
       const batch = pendingTicks.splice(0, MAX_BATCH_SIZE);
       const batchStartedAt = performance.now();
 
+      recordFlushReason(reason);
+      batchSizeMetrics.record(batch.length);
       for (const item of batch) {
         queueWaitLatency.record(batchStartedAt - item.acceptedAt);
       }
 
+      let dbDurationMs = 0;
       try {
         const dbStartedAt = performance.now();
         try {
@@ -91,9 +98,17 @@ async function flushPendingTicks(): Promise<void> {
             })),
           });
         } finally {
-          // One sample per batch; includes Prisma/client overhead and the
-          // database round trip, not just PostgreSQL execution time.
-          databaseBatchWriteLatency.record(elapsedMs(dbStartedAt));
+          // Includes Prisma/client overhead and the database round trip.
+          dbDurationMs = elapsedMs(dbStartedAt);
+          databaseBatchWriteLatency.record(dbDurationMs);
+
+          if (dbDurationMs >= SLOW_DATABASE_BATCH_MS) {
+            console.warn("Slow market tick database batch:", {
+              durationMs: Number(dbDurationMs.toFixed(2)),
+              batchSize: batch.length,
+              flushReason: reason,
+            });
+          }
         }
 
         for (const item of batch) {
@@ -116,7 +131,7 @@ async function flushPendingTicks(): Promise<void> {
     flushPromise = undefined;
   }
 
-  if (pendingTicks.length > 0) await flushPendingTicks();
+  if (pendingTicks.length > 0) await flushPendingTicks("drain");
 }
 
 function scheduleSnapshotRefresh(symbol: string): void {
@@ -168,7 +183,7 @@ export async function shutdownMarketTickRepository(): Promise<void> {
   acceptingTicks = false;
   clearFlushTimer();
 
-  await flushPendingTicks();
+  await flushPendingTicks("shutdown");
 
   for (const [symbol, timer] of snapshotTimers) {
     clearTimeout(timer);
