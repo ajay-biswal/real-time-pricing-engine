@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import { ObjectId } from "mongodb";
 import { redisClient } from "../../config/redis.js";
-import { getMongoDb } from "../../config/mongodb.js";
-import type { MerchantRecord } from "./auth.types.js";
+import { prisma } from "../../config/prisma.js";
+import type { MerchantRecord, MerchantRole } from "./auth.types.js";
 
 declare global {
   namespace Express {
@@ -27,15 +26,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     const sessionKey = `auth:session:${hashSessionToken(match[1])}`;
-    const userId = await redisClient.get(sessionKey);
-    if (!userId || !ObjectId.isValid(userId)) {
+    const merchantId = await redisClient.get(sessionKey);
+    if (!merchantId) {
       res.status(401).json({ error: "Session is invalid or expired", code: "SESSION_INVALID" });
       return;
     }
 
-    const merchant = await getMongoDb().collection<MerchantRecord>("merchants").findOne({
-      _id: new ObjectId(userId),
-    });
+    const merchant = await prisma.merchant.findUnique({ where: { id: merchantId } });
     if (!merchant) {
       await redisClient.del(sessionKey);
       res.status(401).json({ error: "Account no longer exists", code: "ACCOUNT_NOT_FOUND" });
@@ -54,7 +51,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export function requireRole(...allowedRoles: Array<MerchantRecord["role"]>) {
+export function requireRole(...allowedRoles: MerchantRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.merchant) {
       res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
@@ -77,11 +74,11 @@ export function requireVerifiedMerchant(req: Request, res: Response, next: NextF
     res.status(403).json({ error: "Insufficient permissions", code: "FORBIDDEN" });
     return;
   }
-  if (req.merchant.kyc.status !== "VERIFIED") {
+  if (req.merchant.kycStatus !== "VERIFIED") {
     res.status(403).json({
       error: "KYC verification is required before accessing trading functionality",
       code: "KYC_NOT_VERIFIED",
-      kycStatus: req.merchant.kyc.status,
+      kycStatus: req.merchant.kycStatus,
     });
     return;
   }
