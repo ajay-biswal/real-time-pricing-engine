@@ -1,15 +1,10 @@
 import { prisma } from "../../config/prisma.js";
 import { redisClient } from "../../config/redis.js";
+import { RollingPricingWindow, type PricingTick } from "./rolling-pricing-window.js";
 
-const WINDOW_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_CHANNEL = "market:snapshot:updates";
 
-export interface PricingTick {
-  symbol: string;
-  buy: number;
-  sell: number;
-  timestamp: Date;
-}
+export type { PricingTick } from "./rolling-pricing-window.js";
 
 export interface PricingSnapshot {
   symbol: string;
@@ -22,99 +17,27 @@ export interface PricingSnapshot {
   publishedAt: string;
 }
 
-interface Entry extends PricingTick {
-  sequence: number;
-}
-
-interface SymbolState {
-  ticks: Entry[];
-  head: number;
-  highs: Entry[];
-  highHead: number;
-  lows: Entry[];
-  lowHead: number;
-  sequence: number;
-  latest?: Entry;
-}
-
-const states = new Map<string, SymbolState>();
+const states = new Map<string, RollingPricingWindow>();
 let initialized = false;
 
-function stateFor(symbol: string): SymbolState {
+function windowFor(symbol: string): RollingPricingWindow {
   let state = states.get(symbol);
   if (!state) {
-    state = { ticks: [], head: 0, highs: [], highHead: 0, lows: [], lowHead: 0, sequence: 0 };
+    state = new RollingPricingWindow(symbol);
     states.set(symbol, state);
   }
   return state;
 }
 
-function compact<T>(items: T[], head: number): { items: T[]; head: number } {
-  if (head > 1024 && head * 2 >= items.length) return { items: items.slice(head), head: 0 };
-  return { items, head };
-}
-
-function expire(state: SymbolState, cutoff: number): void {
-  while (state.head < state.ticks.length && state.ticks[state.head]!.timestamp.getTime() < cutoff) {
-    state.head++;
-  }
-  while (state.highHead < state.highs.length && state.highs[state.highHead]!.timestamp.getTime() < cutoff) {
-    state.highHead++;
-  }
-  while (state.lowHead < state.lows.length && state.lows[state.lowHead]!.timestamp.getTime() < cutoff) {
-    state.lowHead++;
-  }
-
-  const ticks = compact(state.ticks, state.head);
-  state.ticks = ticks.items;
-  state.head = ticks.head;
-  const highs = compact(state.highs, state.highHead);
-  state.highs = highs.items;
-  state.highHead = highs.head;
-  const lows = compact(state.lows, state.lowHead);
-  state.lows = lows.items;
-  state.lowHead = lows.head;
-}
-
-function addToState(tick: PricingTick): PricingSnapshot | undefined {
-  const state = stateFor(tick.symbol);
-  const entry: Entry = { ...tick, sequence: ++state.sequence };
-
-  // A late/out-of-order tick is retained only if it belongs to the active window.
-  // Provider samples currently omit timestamps, so receipt time is used upstream.
-  state.ticks.push(entry);
-  while (state.highs.length > state.highHead && state.highs[state.highs.length - 1]!.buy <= entry.buy) {
-    state.highs.pop();
-  }
-  state.highs.push(entry);
-  while (state.lows.length > state.lowHead && state.lows[state.lows.length - 1]!.buy >= entry.buy) {
-    state.lows.pop();
-  }
-  state.lows.push(entry);
-
-  if (!state.latest || entry.timestamp.getTime() > state.latest.timestamp.getTime() ||
-      (entry.timestamp.getTime() === state.latest.timestamp.getTime() && entry.sequence > state.latest.sequence)) {
-    state.latest = entry;
-  }
-
-  const now = Date.now();
-  expire(state, now - WINDOW_MS);
-  const first = state.ticks[state.head];
-  const high = state.highs[state.highHead];
-  const low = state.lows[state.lowHead];
-  const latest = state.latest;
-
-  if (!first || !high || !low || !latest) return undefined;
-  const change = first.buy === 0 ? 0 : ((latest.buy - first.buy) / first.buy) * 100;
-
+function toSnapshot(values: NonNullable<ReturnType<RollingPricingWindow["snapshot"]>>): PricingSnapshot {
   return {
-    symbol: tick.symbol,
-    buy: String(latest.buy),
-    sell: String(latest.sell),
-    high24h: String(high.buy),
-    low24h: String(low.buy),
-    change24h: String(change),
-    updatedAt: latest.timestamp.toISOString(),
+    symbol: values.symbol,
+    buy: String(values.buy),
+    sell: String(values.sell),
+    high24h: String(values.high24h),
+    low24h: String(values.low24h),
+    change24h: String(values.change24h),
+    updatedAt: values.updatedAt.toISOString(),
     publishedAt: new Date().toISOString(),
   };
 }
@@ -131,46 +54,32 @@ async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
 
 /**
  * Rebuild the rolling window from PostgreSQL before accepting provider updates.
- * PostgreSQL remains the durable source; memory serves the latency-sensitive path.
+ * Rows are loaded in deterministic event-time/id order to restore same-timestamp ordering.
  */
 export async function initializePricingState(): Promise<void> {
   if (initialized) return;
 
-  const cutoff = new Date(Date.now() - WINDOW_MS);
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const ticks = await prisma.marketTick.findMany({
-    where: { timestamp: { gte: cutoff, lte: new Date() } },
+    where: { timestamp: { gte: cutoff, lte: now } },
     orderBy: [{ symbol: "asc" }, { timestamp: "asc" }, { id: "asc" }],
     select: { symbol: true, buy: true, sell: true, timestamp: true },
   });
 
   for (const tick of ticks) {
-    addToState({
+    windowFor(tick.symbol).add({
       symbol: tick.symbol,
       buy: Number(tick.buy),
       sell: Number(tick.sell),
       timestamp: tick.timestamp,
-    });
+    }, now.getTime());
   }
 
   // Repopulate Redis after a Redis restart, even when the provider has not ticked yet.
   for (const state of states.values()) {
-    const latest = state.latest;
-    if (!latest) continue;
-    const first = state.ticks[state.head];
-    const high = state.highs[state.highHead];
-    const low = state.lows[state.lowHead];
-    if (!first || !high || !low) continue;
-    const change = first.buy === 0 ? 0 : ((latest.buy - first.buy) / first.buy) * 100;
-    await publishSnapshot({
-      symbol: latest.symbol,
-      buy: String(latest.buy),
-      sell: String(latest.sell),
-      high24h: String(high.buy),
-      low24h: String(low.buy),
-      change24h: String(change),
-      updatedAt: latest.timestamp.toISOString(),
-      publishedAt: new Date().toISOString(),
-    });
+    const snapshot = state.snapshot(now.getTime());
+    if (snapshot) await publishSnapshot(toSnapshot(snapshot));
   }
 
   initialized = true;
@@ -182,6 +91,6 @@ export function acceptPricingTick(tick: PricingTick): void {
   if (!initialized) {
     throw new Error("Pricing state must be initialized before accepting ticks");
   }
-  const snapshot = addToState(tick);
-  if (snapshot) void publishSnapshot(snapshot);
+  const snapshot = windowFor(tick.symbol).add(tick);
+  if (snapshot) void publishSnapshot(toSnapshot(snapshot));
 }
