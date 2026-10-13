@@ -1,10 +1,12 @@
+import bcrypt from "bcryptjs";
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 
-const KEY_LENGTH = 64;
+const BCRYPT_ROUNDS = 12;
+const LEGACY_KEY_LENGTH = 64;
 
-function deriveKey(password: string, salt: string): Promise<Buffer> {
+function deriveLegacyKey(password: string, salt: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    scrypt(password, salt, KEY_LENGTH, (error, derivedKey) => {
+    scrypt(password, salt, LEGACY_KEY_LENGTH, (error, derivedKey) => {
       if (error) reject(error);
       else resolve(derivedKey as Buffer);
     });
@@ -12,16 +14,23 @@ function deriveKey(password: string, salt: string): Promise<Buffer> {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  const derivedKey = await deriveKey(password, salt);
-  return `scrypt$${salt}$${derivedKey.toString("hex")}`;
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$") || storedHash.startsWith("$2y$")) {
+    return bcrypt.compare(password, storedHash);
+  }
+
+  // Existing accounts created before the bcrypt migration remain able to sign in.
   const [algorithm, salt, expectedHex] = storedHash.split("$");
   if (algorithm !== "scrypt" || !salt || !expectedHex) return false;
 
   const expected = Buffer.from(expectedHex, "hex");
-  const actual = await deriveKey(password, salt);
+  const actual = await deriveLegacyKey(password, salt);
   return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+export function isLegacyPasswordHash(storedHash: string): boolean {
+  return storedHash.startsWith("scrypt$");
 }
