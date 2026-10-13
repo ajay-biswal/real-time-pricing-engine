@@ -24,7 +24,7 @@ interface PendingTick {
 
 const BATCH_INTERVAL_MS = 50;
 const MAX_BATCH_SIZE = 250;
-const SNAPSHOT_COALESCE_MS = 500;
+const SNAPSHOT_COALESCE_MS = 50;
 
 const pendingTicks: PendingTick[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
