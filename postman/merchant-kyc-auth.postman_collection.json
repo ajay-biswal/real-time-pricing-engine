@@ -1,0 +1,307 @@
+{
+  "info": {
+    "name": "Real-Time Pricing Engine — Merchant Auth & KYC",
+    "description": "Run requests in order. Set baseUrl and adminApiKey in a Postman environment. The manual KYC review endpoint works only when NODE_ENV is not production.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": "ChangeThisStrongPassword123!"
+    },
+    {
+      "key": "merchantId",
+      "value": ""
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "adminApiKey",
+      "value": "replace-with-the-same-value-as-ADMIN_API_KEY-in-your-local-env"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Register merchant",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('email', 'merchant.' + Date.now() + '@example.com');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/register"
+      },
+      "response": [],
+      "protocolProfileBehavior": {},
+      "description": "Creates a merchant with KYC status NOT_SUBMITTED. Role is always assigned by the server."
+    },
+    {
+      "name": "2. Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login succeeds', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "if (body.accessToken) pm.collectionVariables.set('accessToken', body.accessToken);",
+              "if (body.merchant && body.merchant._id) pm.collectionVariables.set('merchantId', body.merchant._id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Get current merchant",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Authenticated profile returned', function () { pm.response.to.have.status(200); });",
+              "pm.test('Password hash is never returned', function () { pm.expect(pm.response.text()).not.to.include('passwordHash'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Submit KYC",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"applicantName\": \"Postman Test Merchant\",\n  \"documentType\": \"PASSPORT\",\n  \"providerReference\": \"postman-manual-review\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/kyc/submissions"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('KYC accepted as pending', function () { pm.response.to.have.status(202); });",
+              "pm.test('KYC remains pending until reviewed', function () { pm.expect(pm.response.json().merchant.kyc.status).to.eql('PENDING'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Trading denied before KYC verification",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/trading/access"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Unverified merchant is denied', function () { pm.response.to.have.status(403); });",
+              "pm.test('Denial explains KYC requirement', function () { pm.expect(pm.response.json().code).to.eql('KYC_NOT_VERIFIED'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Development admin — verify KYC",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-admin-api-key",
+            "value": "{{adminApiKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"VERIFIED\",\n  \"providerReference\": \"postman-approved-reference\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/admin/merchants/{{merchantId}}/kyc"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Development KYC review succeeds', function () { pm.response.to.have.status(200); });",
+              "pm.test('KYC status is verified', function () { pm.expect(pm.response.json().merchant.kyc.status).to.eql('VERIFIED'); });"
+            ]
+          }
+        }
+      ],
+      "description": "Testing-only manual review endpoint. Disabled in production. Replace with a signed webhook from a trusted KYC provider for production."
+    },
+    {
+      "name": "7. Trading allowed after verification",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/trading/access"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Verified merchant is allowed', function () { pm.response.to.have.status(200); });",
+              "pm.test('Access granted', function () { pm.expect(pm.response.json().access).to.eql('GRANTED'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/logout"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Logout succeeds', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Verify logged-out session is rejected",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Revoked session is rejected', function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
