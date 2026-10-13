@@ -1,10 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { redisClient } from "../../config/redis.js";
-import { prisma } from "../../config/prisma.js";
+import { authRepository } from "./auth.repository.js";
 import type { MerchantRecord, MerchantRole } from "./auth.types.js";
-import { hashSessionToken } from "./session-token.js";
-
-export { hashSessionToken } from "./session-token.js";
+import { AuthServiceError, verifyAccessToken } from "./auth.service.js";
 
 declare global {
   namespace Express {
@@ -23,21 +21,29 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    const sessionKey = `auth:session:${hashSessionToken(match[1])}`;
-    const merchantId = await redisClient.get(sessionKey);
-    if (!merchantId) {
-      res.status(401).json({ error: "Session is invalid or expired", code: "SESSION_INVALID" });
+    let claims;
+    try {
+      claims = verifyAccessToken(match[1]);
+    } catch (error) {
+      if (error instanceof AuthServiceError || error instanceof Error) {
+        res.status(401).json({ error: "Access token is invalid or expired", code: "TOKEN_INVALID" });
+        return;
+      }
+      throw error;
+    }
+
+    const revoked = await redisClient.exists(`auth:revoked:${claims.jti}`);
+    if (revoked) {
+      res.status(401).json({ error: "Access token has been revoked", code: "TOKEN_REVOKED" });
       return;
     }
 
-    const merchant = await prisma.merchant.findUnique({ where: { id: merchantId } });
+    const merchant = await authRepository.findById(claims.sub);
     if (!merchant) {
-      await redisClient.del(sessionKey);
       res.status(401).json({ error: "Account no longer exists", code: "ACCOUNT_NOT_FOUND" });
       return;
     }
     if (merchant.accountStatus !== "ACTIVE") {
-      await redisClient.del(sessionKey);
       res.status(403).json({ error: "Account is suspended", code: "ACCOUNT_SUSPENDED" });
       return;
     }
