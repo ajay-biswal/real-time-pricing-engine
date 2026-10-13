@@ -174,10 +174,23 @@ export function connectMarketData(): WebSocket | undefined {
         timestamp?: string | number;
       };
 
+<<<<<<< Updated upstream
       const eventName = "event" in data ? String(data.event) : "unknown";
       const sampleCount = timestampSamplesLogged[eventName] ?? 0;
       if (
         (eventName === "marketPriceSnapshot" || eventName === "marketPriceUpdate") &&
+=======
+      const eventName =
+        typeof data === "object" && data !== null && "event" in data
+          ? String(data.event)
+          : "unknown";
+
+      const sampleCount = timestampSamplesLogged[eventName] ?? 0;
+
+      if (
+        (eventName === "marketPriceSnapshot" ||
+          eventName === "marketPriceUpdate") &&
+>>>>>>> Stashed changes
         sampleCount < 3
       ) {
         console.log("Provider market data diagnostic:", {
@@ -185,6 +198,10 @@ export function connectMarketData(): WebSocket | undefined {
           payload: data,
           receivedAt: new Date().toISOString(),
         });
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
         timestampSamplesLogged[eventName] = sampleCount + 1;
       }
 

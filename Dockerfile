@@ -4,8 +4,13 @@ RUN corepack enable
 
 WORKDIR /app
 
+<<<<<<< Updated upstream
 # Prisma config reads DATABASE_URL during client generation. This placeholder
 # is only for image-build time; Compose supplies the runtime database URL.
+=======
+# Required by prisma.config.ts during Prisma Client generation.
+# Docker Compose overrides this with the actual container database URL.
+>>>>>>> Stashed changes
 ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/pricing_engine"
 
 FROM base AS deps
