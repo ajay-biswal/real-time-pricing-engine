@@ -5,12 +5,14 @@ import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import {
+  batchSizeMetrics,
   databaseBatchWriteLatency,
   ingestionLatency,
   queueWaitLatency,
-  snapshotLatency,
+  reportFlushReasons,
 } from "./modules/common/latency-metrics.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
+import { initializePricingState } from "./modules/pricing/pricing-state.js";
 
 import {
   closeMarketDataSocket,
@@ -35,7 +37,7 @@ async function closeDependencies(): Promise<void> {
   await closeMarketDataSocket(marketDataSocket);
   await shutdownMarketTickRepository();
 
-  // Snapshot refreshes must finish before their Redis connection is closed.
+  // All accepted persistence operations have drained before dependencies close.
   await closeClientWebSocket();
 
   const results = await Promise.allSettled([
@@ -90,6 +92,7 @@ async function main(): Promise<void> {
     console.log("PostgreSQL connected successfully");
 
     await connectRedis();
+    await initializePricingState();
     await attachClientWebSocket(server);
 
     marketDataSocket = connectMarketData();
@@ -100,8 +103,9 @@ async function main(): Promise<void> {
         console.log("Latency metrics", {
           queueWait: queueWaitLatency.report(),
           databaseBatchWrite: databaseBatchWriteLatency.report(),
+          batchSize: batchSizeMetrics.report(),
+          flushReasons: reportFlushReasons(),
           ingestion: ingestionLatency.report(),
-          snapshot: snapshotLatency.report(),
         });
       }, 10_000);
       metricsTimer.unref();

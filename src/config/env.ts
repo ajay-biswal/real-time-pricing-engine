@@ -8,6 +8,7 @@ const envSchema = z.object({
 
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 
+  MARKET_DATA_MODE: z.enum(["live", "mock"]).default("live"),
   MARKET_WS_URL: z.string().url(),
   MARKET_API_KEY: z.string().default(""),
   MARKET_SECRET_KEY: z.string().default(""),
