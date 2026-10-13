@@ -11,7 +11,8 @@
     "typecheck": "prisma generate && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "benchmark:ws": "node scripts/benchmark-websocket.mjs"
   },
   "keywords": [],
   "author": "",
