@@ -1,53 +1,60 @@
 import { createServer } from "node:http";
 import { app } from "./app.js";
 import { env } from "./config/env.js";
-import {
-  connectMongoDB,
-  closeMongoDB,
-} from "./config/mongodb.js";
-import {
-  connectRedis,
-  closeRedis,
-} from "./config/redis.js";
-
+import { prisma } from "./config/prisma.js";
+import { connectRedis, closeRedis } from "./config/redis.js";
 import { connectMarketData } from "./modules/market-data/market-data.client.js";
+import type WebSocket from "ws";
 
 const server = createServer(app);
+let marketDataSocket: WebSocket | undefined;
+let shuttingDown = false;
+
+async function closeDependencies(): Promise<void> {
+  marketDataSocket?.close();
+
+  await Promise.allSettled([
+    prisma.$disconnect(),
+    closeRedis(),
+  ]);
+}
 
 async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   console.log(`${signal} received. Shutting down...`);
 
-  server.close(async () => {
-    await Promise.allSettled([
-      closeMongoDB(),
-      closeRedis(),
-    ]);
-
-    process.exit(0);
-  });
-
-  setTimeout(() => {
+  const timeout = setTimeout(() => {
     console.error("Graceful shutdown timed out");
     process.exit(1);
-  }, 10_000).unref();
+  }, 10_000);
+
+  timeout.unref();
+
+  server.close(async () => {
+    await closeDependencies();
+    clearTimeout(timeout);
+    process.exit(0);
+  });
 }
 
 async function main(): Promise<void> {
   try {
-    await connectMongoDB();
+    await prisma.$connect();
+    await prisma.$queryRaw`SELECT 1`;
+    console.log("PostgreSQL connected successfully");
+
     await connectRedis();
+
+    marketDataSocket = connectMarketData();
 
     server.listen(env.PORT, "0.0.0.0", () => {
       console.log(`HTTP server listening on port ${env.PORT}`);
     });
   } catch (error) {
     console.error("Application startup failed:", error);
-
-    await Promise.allSettled([
-      closeMongoDB(),
-      closeRedis(),
-    ]);
-
+    await closeDependencies();
     process.exitCode = 1;
   }
 }
