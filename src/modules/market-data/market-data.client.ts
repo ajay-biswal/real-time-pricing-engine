@@ -74,7 +74,9 @@ interface AuthenticationMessage {
 let marketDataStopping = false;
 const inFlightPersists = new Set<Promise<void>>();
 
-export async function closeMarketDataSocket(socket: WebSocket | undefined): Promise<void> {
+export async function closeMarketDataSocket(
+  socket: WebSocket | undefined,
+): Promise<void> {
   marketDataStopping = true;
   if (socket && socket.readyState !== WebSocket.CLOSED) {
     await new Promise<void>((resolve) => {
@@ -87,6 +89,8 @@ export async function closeMarketDataSocket(socket: WebSocket | undefined): Prom
     await Promise.allSettled([...inFlightPersists]);
   }
 }
+
+const timestampSamplesLogged: Record<string, number> = {};
 
 export function connectMarketData(): WebSocket {
   marketDataStopping = false;
@@ -171,6 +175,27 @@ export function connectMarketData(): WebSocket {
         timestamp?: string | number;
       };
 
+      const eventName =
+  typeof data === "object" && data !== null && "event" in data
+    ? String(data.event)
+    : "unknown";
+
+const sampleCount = timestampSamplesLogged[eventName] ?? 0;
+
+if (
+  (eventName === "marketPriceSnapshot" ||
+    eventName === "marketPriceUpdate") &&
+  sampleCount < 3
+) {
+  console.log("Provider market data diagnostic:", {
+    event: eventName,
+    payload: data,
+    receivedAt: new Date().toISOString(),
+  });
+
+  timestampSamplesLogged[eventName] = sampleCount + 1;
+}
+
       const timestamp =
         tick.timestamp === undefined || tick.timestamp === null
           ? new Date()
@@ -195,13 +220,15 @@ export function connectMarketData(): WebSocket {
         buy: tick.bid,
         sell: tick.ask,
         timestamp,
-      }).catch((error: unknown) => {
-        if (!marketDataStopping) {
-          console.error("Failed to persist market tick:", error);
-        }
-      }).finally(() => {
-        inFlightPersists.delete(persist);
-      });
+      })
+        .catch((error: unknown) => {
+          if (!marketDataStopping) {
+            console.error("Failed to persist market tick:", error);
+          }
+        })
+        .finally(() => {
+          inFlightPersists.delete(persist);
+        });
 
       inFlightPersists.add(persist);
 
