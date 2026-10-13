@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model MarketTick {
+  id        BigInt   @id @default(autoincrement())
+  symbol    String   @db.VarChar(20)
+  buy       Decimal  @db.Decimal(20, 10)
+  sell      Decimal  @db.Decimal(20, 10)
+  timestamp DateTime @db.Timestamptz(3)
+
+  @@index([symbol, timestamp])
+}
+
+model MarketSnapshot {
+  symbol    String   @id @db.VarChar(20)
+  buy       Decimal  @db.Decimal(20, 10)
+  sell      Decimal  @db.Decimal(20, 10)
+  high24h   Decimal  @db.Decimal(20, 10)
+  low24h    Decimal  @db.Decimal(20, 10)
+  change24h Decimal  @db.Decimal(12, 6)
+  updatedAt DateTime @db.Timestamptz(3)
+}
