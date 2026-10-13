@@ -14,4 +14,8 @@ export const authRepository = {
   findById(id: string) {
     return prisma.merchant.findUnique({ where: { id } });
   },
+
+  updatePasswordHash(id: string, passwordHash: string) {
+    return prisma.merchant.update({ where: { id }, data: { passwordHash } });
+  },
 };
