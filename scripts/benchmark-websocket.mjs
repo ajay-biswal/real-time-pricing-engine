@@ -1,10 +1,15 @@
 import WebSocket from "ws";
 
 const port = Number(process.env.PORT ?? 5000);
-const symbol = (process.argv[2] ?? "EURUSD").toUpperCase();
-const durationSeconds = Math.max(5, Number(process.argv[3] ?? 30));
+const args = process.argv.slice(2).filter((arg) => arg !== "--");
+const symbol = (args[0] ?? "EURUSD").toUpperCase();
+const requestedDuration = Number(args[1] ?? 30);
+const durationSeconds = Number.isFinite(requestedDuration)
+  ? Math.max(5, requestedDuration)
+  : 30;
 const url = `ws://127.0.0.1:${port}/ws`;
-const samples = [];
+const distributionSamples = [];
+const tickAgeSamples = [];
 let updates = 0;
 let invalidTimestamps = 0;
 let socket;
@@ -43,11 +48,19 @@ socket.on("message", (raw) => {
     return;
   }
 
-  const latencyMs = Date.now() - publishedAt;
+  const distributionLatencyMs = Date.now() - publishedAt;
   // Wall-clock measurement is suitable for this local same-host test; small
   // negative values indicate clock/timestamp resolution noise and are excluded.
-  if (latencyMs >= 0) samples.push(latencyMs);
+  if (distributionLatencyMs >= 0) distributionSamples.push(distributionLatencyMs);
   else invalidTimestamps += 1;
+
+  // updatedAt is the market tick timestamp stored in the snapshot. This measures
+  // tick-to-client age only when the provider timestamp uses the same wall clock.
+  const tickTimestamp = Date.parse(message.data.updatedAt ?? "");
+  if (Number.isFinite(tickTimestamp)) {
+    const tickAgeMs = Date.now() - tickTimestamp;
+    if (tickAgeMs >= 0) tickAgeSamples.push(tickAgeMs);
+  }
 });
 
 socket.on("error", (error) => {
@@ -58,23 +71,27 @@ socket.on("error", (error) => {
 
 socket.on("close", () => {
   clearTimeout(timer);
-  const sorted = [...samples].sort((a, b) => a - b);
+  const distribution = [...distributionSamples].sort((a, b) => a - b);
+  const tickAge = [...tickAgeSamples].sort((a, b) => a - b);
+  const summarize = (sorted) => ({
+    samples: sorted.length,
+    p50: Number(percentile(sorted, 0.5).toFixed(2)),
+    p95: Number(percentile(sorted, 0.95).toFixed(2)),
+    p99: Number(percentile(sorted, 0.99).toFixed(2)),
+    max: Number((sorted.at(-1) ?? 0).toFixed(2)),
+  });
   const report = {
     symbol,
     durationSeconds,
     updatesReceived: updates,
-    measuredSamples: sorted.length,
     invalidTimestamps,
-    latencyMs: {
-      p50: Number(percentile(sorted, 0.5).toFixed(2)),
-      p95: Number(percentile(sorted, 0.95).toFixed(2)),
-      p99: Number(percentile(sorted, 0.99).toFixed(2)),
-      max: Number((sorted.at(-1) ?? 0).toFixed(2)),
-    },
-    meets50ms: sorted.length > 0 && percentile(sorted, 0.95) <= 50,
-    note: "Publish-to-client latency using wall-clock timestamps on the same host; does not include provider-to-database delay.",
+    distributionLatencyMs: summarize(distribution),
+    tickToClientAgeMs: summarize(tickAge),
+    distributionMeets50ms: distribution.length > 0 && percentile(distribution, 0.95) <= 50,
+    tickToClientMeets50ms: tickAge.length > 0 && percentile(tickAge, 0.95) <= 50,
+    note: "Distribution latency is publication-to-receipt. Tick-to-client age uses snapshot.updatedAt and is valid only if provider timestamps are synchronized to this host's wall clock.",
   };
   console.log(JSON.stringify(report, null, 2));
-  if (sorted.length === 0) process.exitCode = 1;
+  if (distribution.length === 0) process.exitCode = 1;
 });
 
