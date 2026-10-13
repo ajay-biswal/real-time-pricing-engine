@@ -43,6 +43,7 @@ function toSnapshot(values: NonNullable<ReturnType<RollingPricingWindow["snapsho
   };
 }
 
+/** Serialize Redis writes per symbol so an older asynchronous publish cannot overwrite a newer snapshot. */
 async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
   const previous = publishQueues.get(snapshot.symbol) ?? Promise.resolve();
   const current = previous
@@ -53,7 +54,6 @@ async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
       await redisClient.publish(SNAPSHOT_CHANNEL, message);
     })
     .catch((error: unknown) => {
-      // PostgreSQL remains the durable source; a later tick or restart repairs Redis.
       console.error(`Failed to publish in-memory snapshot for ${snapshot.symbol}:`, error);
     })
     .finally(() => {
@@ -61,61 +61,9 @@ async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
         publishQueues.delete(snapshot.symbol);
       }
     });
+
   publishQueues.set(snapshot.symbol, current);
   await current;
-}mport { prisma } from "../../config/prisma.js";
-import { redisClient } from "../../config/redis.js";
-import { RollingPricingWindow, type PricingTick } from "./rolling-pricing-window.js";
-
-const SNAPSHOT_CHANNEL = "market:snapshot:updates";
-
-export type { PricingTick } from "./rolling-pricing-window.js";
-
-export interface PricingSnapshot {
-  symbol: string;
-  buy: string;
-  sell: string;
-  high24h: string;
-  low24h: string;
-  change24h: string;
-  updatedAt: string;
-  publishedAt: string;
-}
-
-const states = new Map<string, RollingPricingWindow>();
-const publishQueues = new Map<string, Promise<void>>();
-let initialized = false;
-
-function windowFor(symbol: string): RollingPricingWindow {
-  let state = states.get(symbol);
-  if (!state) {
-    state = new RollingPricingWindow(symbol);
-    states.set(symbol, state);
-  }
-  return state;
-}
-
-function toSnapshot(values: NonNullable<ReturnType<RollingPricingWindow["snapshot"]>>): PricingSnapshot {
-  return {
-    symbol: values.symbol,
-    buy: String(values.buy),
-    sell: String(values.sell),
-    high24h: String(values.high24h),
-    low24h: String(values.low24h),
-    change24h: String(values.change24h),
-    updatedAt: values.updatedAt.toISOString(),
-    publishedAt: new Date().toISOString(),
-  };
-}
-
-async function publishSnapshot(snapshot: PricingSnapshot): Promise<void> {
-  const message = JSON.stringify(snapshot);
-  try {
-    await redisClient.set(`market:snapshot:${snapshot.symbol}`, message);
-    await redisClient.publish(SNAPSHOT_CHANNEL, message);
-  } catch (error) {
-    console.error(`Failed to publish in-memory snapshot for ${snapshot.symbol}:`, error);
-  }
 }
 
 /**
