@@ -298,7 +298,9 @@ cd real-time-pricing-engine
 cp .env.example .env
 ~~~
 
-Configure the database URL, Redis URL, upstream WebSocket URL, and provider credentials using the variable names in `.env.example`. Never commit `.env` or real credentials.
+Configure the database URL, Redis URL, upstream WebSocket URL, provider credentials, `DATABASE_URL_DOCKER`, and `POSTGRES_PASSWORD` using the variable names in `.env.example`. The sample values are placeholders; replace `YOUR_PASSWORD` consistently in both database URLs and `POSTGRES_PASSWORD`. Never commit `.env` or real credentials.
+
+To validate the full pipeline without provider access, set `MARKET_DATA_MODE=mock`. The application will generate synthetic prices for all 61 configured symbols. These are test data only and must not be presented as live-feed results. In `live` mode, valid provider credentials are required.
 
 ### Run with Docker Compose
 
@@ -316,7 +318,7 @@ curl -i http://localhost:5000/health
 
 A healthy HTTP endpoint confirms that the HTTP server is responding; it does not prove that the provider is sending live prices.
 
-The Compose configuration exposes PostgreSQL on host port 5433 and Redis on host port 6379. Verify these ports against the current Compose file. Change development credentials before any non-local deployment.
+The Compose configuration exposes PostgreSQL on host port 5434 and Redis on host port 6379 by default. The API container runs with `NODE_ENV=production`, so the development-only manual KYC review endpoint is disabled. Change all sample credentials before any non-local deployment.
 
 ### Local development commands
 
@@ -351,9 +353,9 @@ Interpret results according to the data source and test conditions. A successful
 
 ## 15. Continuous integration
 
-The latest recorded GitHub Actions run passed dependency installation, TypeScript type checking, automated tests, and the production build.
+The GitHub Actions workflow checks dependency installation, TypeScript type checking, automated tests, and the production build.
 
-These checks apply to the tested commit. They do not verify that the external provider is available, that all 61 symbols are updating live, or that the 50 ms end-to-end target is met.
+These checks apply only to commits for which the workflow has completed successfully. They do not verify that the external provider is available, that all 61 symbols are updating live, or that the 50 ms end-to-end target is met.
 
 ## 16. Known limitations
 
