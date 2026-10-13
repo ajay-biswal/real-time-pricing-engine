@@ -1,8 +1,10 @@
-import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { redisClient } from "../../config/redis.js";
 import { prisma } from "../../config/prisma.js";
 import type { MerchantRecord, MerchantRole } from "./auth.types.js";
+import { hashSessionToken } from "./session-token.js";
+
+export { hashSessionToken } from "./session-token.js";
 
 declare global {
   namespace Express {
@@ -10,10 +12,6 @@ declare global {
       merchant?: MerchantRecord;
     }
   }
-}
-
-export function hashSessionToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
