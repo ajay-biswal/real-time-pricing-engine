@@ -29,6 +29,35 @@ const BATCH_INTERVAL_MS = 50;
 const MAX_BATCH_SIZE = 250;
 const SLOW_DATABASE_BATCH_MS = 50;
 const MAX_PENDING_TICKS = 10_000;
+const MAX_DATABASE_ATTEMPTS = 3;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function writeBatchWithRetry(batch: PendingTick[]): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_DATABASE_ATTEMPTS; attempt += 1) {
+    try {
+      await prisma.marketTick.createMany({
+        data: batch.map(({ tick }) => ({
+          symbol: tick.symbol,
+          buy: tick.buy,
+          sell: tick.sell,
+          timestamp: tick.timestamp,
+        })),
+        skipDuplicates: true,
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_DATABASE_ATTEMPTS) {
+        await wait(100 * 2 ** (attempt - 1));
+      }
+    }
+  }
+  throw lastError;
+}
 
 const pendingTicks: PendingTick[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -93,14 +122,7 @@ async function flushPendingTicks(reason: FlushReason = "drain"): Promise<void> {
       try {
         const dbStartedAt = performance.now();
         try {
-          await prisma.marketTick.createMany({
-            data: batch.map(({ tick }) => ({
-              symbol: tick.symbol,
-              buy: tick.buy,
-              sell: tick.sell,
-              timestamp: tick.timestamp,
-            })),
-          });
+          await writeBatchWithRetry(batch);
         } finally {
           // Includes Prisma/client overhead and the database round trip.
           dbDurationMs = elapsedMs(dbStartedAt);
