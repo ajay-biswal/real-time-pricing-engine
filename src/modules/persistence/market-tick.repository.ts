@@ -1,6 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import { updateMarketSnapshot } from "../pricing/pricing.service.js";
 
+
 export interface MarketTickInput {
   symbol: string;
   buy: number;
