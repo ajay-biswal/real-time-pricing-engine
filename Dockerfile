@@ -38,4 +38,4 @@ USER node
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "pnpm exec prisma db push && node dist/main.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/main.js"]
