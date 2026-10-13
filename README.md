@@ -300,7 +300,7 @@ cp .env.example .env
 
 Configure the database URL, Redis URL, upstream WebSocket URL, provider credentials, `DATABASE_URL_DOCKER`, and `POSTGRES_PASSWORD` using the variable names in `.env.example`. The sample values are placeholders; replace `YOUR_PASSWORD` consistently in both database URLs and `POSTGRES_PASSWORD`. Never commit `.env` or real credentials.
 
-To validate the full pipeline without provider access, set `MARKET_DATA_MODE=mock`. The application will generate synthetic prices for all 61 configured symbols. These are test data only and must not be presented as live-feed results. In `live` mode, valid provider credentials are required.
+The application connects only to the configured live provider. Set `MARKET_WS_URL`, `MARKET_API_KEY`, and `MARKET_SECRET_KEY` to the assigned provider endpoint and credentials before starting the service. Synthetic/mock market data is not included in this repository.
 
 ### Run with Docker Compose
 
