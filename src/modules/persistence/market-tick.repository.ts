@@ -7,7 +7,6 @@ import {
   ingestionLatency,
   queueWaitLatency,
   recordFlushReason,
-  snapshotLatency,
   type FlushReason,
 } from "../common/latency-metrics.js";
 import { acceptPricingTick } from "../pricing/pricing-state.js";
@@ -28,7 +27,6 @@ interface PendingTick {
 
 const BATCH_INTERVAL_MS = 50;
 const MAX_BATCH_SIZE = 250;
-const SNAPSHOT_COALESCE_MS = 50;
 const SLOW_DATABASE_BATCH_MS = 50;
 const MAX_PENDING_TICKS = 10_000;
 
