@@ -35,7 +35,7 @@ describe("RollingPricingWindow", () => {
       buy: 120,
       high24h: 120,
       low24h: 80,
-      change24h: 50,
+      change24h: 20,
     });
   });
 
