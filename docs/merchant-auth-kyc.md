@@ -1,11 +1,11 @@
 # Merchant Authentication and KYC API
 
-This module adds merchant registration, session-based authentication, KYC submission, role checks, and a protected trading-access example.
+This module adds merchant registration, JWT bearer authentication, KYC submission, role checks, and a protected trading-access example.
 
 ## Data stores
 
 - PostgreSQL is the application's database. Prisma models merchant accounts and KYC state alongside the existing market-tick models.
-- Redis stores hashed opaque session-token keys and authentication rate-limit counters.
+- JWT access tokens are signed with `JWT_SECRET` using HS256 and expire after 12 hours. Redis stores token revocations and authentication rate-limit counters.
 - No MongoDB service or MongoDB driver is required.
 
 ## Configuration
@@ -16,6 +16,7 @@ Add the development-only review key to your local `.env`:
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/pricing_engine
 REDIS_URL=redis://localhost:6379
 ADMIN_API_KEY=use-a-long-random-development-only-secret
+JWT_SECRET=generate-a-random-secret-at-least-32-characters-long
 ```
 
 Keep the real `ADMIN_API_KEY` and market-provider credentials out of Git. The manual review endpoint below is disabled when `NODE_ENV=production`.
@@ -57,7 +58,7 @@ Password must be 12–128 characters. The server always assigns role `MERCHANT`;
 }
 ```
 
-The response contains an opaque bearer token. Tokens are generated with cryptographically secure randomness; only the token hash is used in the Redis session key. Session TTL is 12 hours.
+The response contains a signed JWT bearer token. The API validates its signature, issuer, audience, and expiration. Access-token lifetime is 12 hours. Redis tracks revoked token IDs so logout invalidates a token before its natural expiration.
 
 Use the returned token in subsequent requests:
 
@@ -115,21 +116,21 @@ This development-only route updates the PostgreSQL `Merchant` row through Prisma
 
 `GET /api/trading/access`
 
-Requires a valid session, active account, `MERCHANT` role, and `kycStatus: VERIFIED`. Before KYC approval, the endpoint returns HTTP 403 with code `KYC_NOT_VERIFIED`. This endpoint demonstrates authorization; it does not place actual trades.
+Requires a valid JWT, active account, `MERCHANT` role, and `kycStatus: VERIFIED`. Before KYC approval, the endpoint returns HTTP 403 with code `KYC_NOT_VERIFIED`. This endpoint demonstrates authorization; it does not place actual trades.
 
 ### Logout
 
 `POST /api/auth/logout`
 
-Requires a valid bearer token and deletes its Redis session key. The same token should then receive HTTP 401.
+Requires a valid bearer token and adds its token ID to a Redis revocation list until the token expires. The same token should then receive HTTP 401.
 
 ## Security behavior
 
-- Passwords are hashed with Node.js `scrypt` and a random per-password salt.
+- Passwords are hashed with bcrypt (cost factor 12). Existing `scrypt` password hashes are verified during login and upgraded to bcrypt after a successful login.
 - Registration/login inputs are validated with Zod.
 - PostgreSQL enforces unique merchant email addresses through a Prisma migration.
 - Authentication requests are rate limited using Redis.
-- Session tokens are opaque random values and are not stored in plaintext in Redis keys.
+- JWTs use HS256 with a required strong secret, fixed issuer/audience, expiration, and a unique token ID. Redis revocation checks are performed on authenticated requests.
 - Trading access is enforced on the backend, not by frontend visibility.
 - Account status and KYC status are read from PostgreSQL through Prisma for protected requests.
 - API responses exclude `passwordHash`.
