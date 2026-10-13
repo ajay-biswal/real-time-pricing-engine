@@ -58,8 +58,6 @@ async function main(): Promise<void> {
 
     marketDataSocket = connectMarketData();
 
-    marketDataSocket = connectMarketData();
-
     server.listen(env.PORT, "0.0.0.0", () => {
       console.log(`HTTP server listening on port ${env.PORT}`);
     });
