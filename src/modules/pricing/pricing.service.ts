@@ -74,6 +74,9 @@ export async function updateMarketSnapshot(symbol: string): Promise<void> {
   if (!snapshot) return;
 
   const message = JSON.stringify({
+    // Wall-clock marker lets a local benchmark client measure publish-to-receive
+    // latency. It is diagnostic metadata, not a persisted market timestamp.
+    publishedAt: new Date().toISOString(),
     symbol: snapshot.symbol,
     buy: snapshot.buy.toString(),
     sell: snapshot.sell.toString(),
