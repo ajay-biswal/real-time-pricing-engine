@@ -5,9 +5,11 @@ import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import {
+  batchSizeMetrics,
   databaseBatchWriteLatency,
   ingestionLatency,
   queueWaitLatency,
+  reportFlushReasons,
   snapshotLatency,
 } from "./modules/common/latency-metrics.js";
 import { connectRedis, closeRedis } from "./config/redis.js";
@@ -100,6 +102,8 @@ async function main(): Promise<void> {
         console.log("Latency metrics", {
           queueWait: queueWaitLatency.report(),
           databaseBatchWrite: databaseBatchWriteLatency.report(),
+          batchSize: batchSizeMetrics.report(),
+          flushReasons: reportFlushReasons(),
           ingestion: ingestionLatency.report(),
           snapshot: snapshotLatency.report(),
         });
