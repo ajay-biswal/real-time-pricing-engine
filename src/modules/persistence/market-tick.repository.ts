@@ -73,9 +73,10 @@ export function saveMarketTick(tick: MarketTickInput): Promise<void> {
     return Promise.reject(new Error(`Market tick persistence queue is full (${MAX_PENDING_TICKS})`));
   }
 
-  // Update the latency-sensitive pricing state before enqueueing durable storage.
-  // The queue bound above prevents accepting an unbounded amount of work.
+  // Measure the synchronous hot path separately from the asynchronous database flush.
+  const acceptedAt = performance.now();
   acceptPricingTick(tick);
+  ingestionLatency.record(elapsedMs(acceptedAt));
 
   const promise = new Promise<void>((resolve, reject) => {
     pendingTicks.push({ tick, acceptedAt: performance.now(), resolve, reject });
@@ -137,10 +138,7 @@ async function flushPendingTicks(reason: FlushReason = "drain"): Promise<void> {
           }
         }
 
-        for (const item of batch) {
-          ingestionLatency.record(elapsedMs(item.acceptedAt));
-          item.resolve();
-        }
+        for (const item of batch) item.resolve();
       } catch (error) {
         for (const item of batch) item.reject(error);
         console.error(`Failed to persist batch of ${batch.length} market ticks:`, error);
@@ -158,8 +156,8 @@ async function flushPendingTicks(reason: FlushReason = "drain"): Promise<void> {
 }
 
 /**
- * Stop accepting new ticks, persist all queued ticks, then refresh every
- * affected snapshot before Redis and PostgreSQL are disconnected.
+ * Stop accepting new ticks and drain queued persistence operations before
+ * PostgreSQL is disconnected. Pricing snapshots are published on tick arrival.
  */
 export async function shutdownMarketTickRepository(): Promise<void> {
   acceptingTicks = false;
