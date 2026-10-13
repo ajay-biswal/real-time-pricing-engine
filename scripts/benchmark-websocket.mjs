@@ -2,15 +2,32 @@ import WebSocket from "ws";
 
 const port = Number(process.env.PORT ?? 5000);
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
-const symbol = (args[0] ?? "EURUSD").toUpperCase();
+const requestedSymbol = (args[0] ?? "EURUSD").toUpperCase();
 const requestedDuration = Number(args[1] ?? 30);
 const durationSeconds = Number.isFinite(requestedDuration)
   ? Math.max(5, requestedDuration)
   : 30;
+const symbols = requestedSymbol === "ALL"
+  ? [
+      "AUDUSD", "AUDCAD", "AUDCHF", "AUDJPY", "AUDNZD", "AUDSGD",
+      "CADCHF", "CADJPY", "CHFJPY", "CHFSGD", "EURAUD", "EURCAD",
+      "EURCHF", "EURGBP", "EURJPY", "EURNZD", "EURUSD", "GBPAUD",
+      "GBPCAD", "GBPCHF", "GBPJPY", "GBPNZD", "GBPUSD", "NZDCAD",
+      "NZDCHF", "NZDJPY", "NZDUSD", "USDCAD", "USDCHF", "USDCNH",
+      "USDJPY", "USDMXN", "USDNOK", "USDPLN", "USDSEK", "USDSGD",
+      "USDTRY", "USDZAR", "EURTRY", "GBPTRY", "NOKJPY", "SEKJPY",
+      "SGDJPY", "ZARJPY", "XAUUSD", "XAGUSD", "BTCUSD", "ETHUSD",
+      "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOGUSD", "DOTUSD",
+      "LTCUSD", "BCHUSD", "XLMUSD", "TRXUSD", "UNIUSD", "FILUSD",
+      "AVXUSD",
+    ]
+  : [requestedSymbol];
 const url = `ws://127.0.0.1:${port}/ws`;
 const distributionSamples = [];
 const tickAgeSamples = [];
+const frameBytes = [];
 let updates = 0;
+let snapshots = 0;
 let invalidTimestamps = 0;
 let socket;
 
@@ -27,8 +44,8 @@ function percentile(sorted, p) {
 }
 
 socket.on("open", () => {
-  console.log(`Connected to ${url}; subscribing to ${symbol} for ${durationSeconds}s`);
-  socket.send(JSON.stringify({ action: "subscribe", symbols: [symbol] }));
+  console.log(`Connected to ${url}; subscribing to ${symbols.length} symbol(s) for ${durationSeconds}s`);
+  socket.send(JSON.stringify({ action: "subscribe", symbols }));
 });
 
 socket.on("message", (raw) => {
@@ -39,23 +56,25 @@ socket.on("message", (raw) => {
     return;
   }
 
-  if (message.event !== "marketPriceUpdate" || message.data?.symbol !== symbol) return;
+  if (!["marketPriceUpdate", "marketPriceSnapshot"].includes(message.event)) return;
+  if (!symbols.includes(message.data?.symbol)) return;
 
-  updates += 1;
+  // Measure the exact UTF-8 JSON frame size received by this client.
+  frameBytes.push(Buffer.byteLength(raw.toString(), "utf8"));
+  if (message.event === "marketPriceSnapshot") snapshots += 1;
+  if (message.event === "marketPriceUpdate") updates += 1;
+
   const publishedAt = Date.parse(message.data.publishedAt ?? "");
-  if (!Number.isFinite(publishedAt)) {
+  if (Number.isFinite(publishedAt)) {
+    const distributionLatencyMs = Date.now() - publishedAt;
+    if (distributionLatencyMs >= 0) distributionSamples.push(distributionLatencyMs);
+    else invalidTimestamps += 1;
+  } else if (message.event === "marketPriceUpdate") {
     invalidTimestamps += 1;
-    return;
   }
 
-  const distributionLatencyMs = Date.now() - publishedAt;
-  // Wall-clock measurement is suitable for this local same-host test; small
-  // negative values indicate clock/timestamp resolution noise and are excluded.
-  if (distributionLatencyMs >= 0) distributionSamples.push(distributionLatencyMs);
-  else invalidTimestamps += 1;
-
-  // updatedAt is the market tick timestamp stored in the snapshot. This measures
-  // tick-to-client age only when the provider timestamp uses the same wall clock.
+  // Provider payloads observed so far omit source timestamps, so updatedAt
+  // may be application receipt time rather than provider event time.
   const tickTimestamp = Date.parse(message.data.updatedAt ?? "");
   if (Number.isFinite(tickTimestamp)) {
     const tickAgeMs = Date.now() - tickTimestamp;
@@ -73,6 +92,7 @@ socket.on("close", () => {
   clearTimeout(timer);
   const distribution = [...distributionSamples].sort((a, b) => a - b);
   const tickAge = [...tickAgeSamples].sort((a, b) => a - b);
+  const sizes = [...frameBytes].sort((a, b) => a - b);
   const summarize = (sorted) => ({
     samples: sorted.length,
     p50: Number(percentile(sorted, 0.5).toFixed(2)),
@@ -81,17 +101,24 @@ socket.on("close", () => {
     max: Number((sorted.at(-1) ?? 0).toFixed(2)),
   });
   const report = {
-    symbol,
+    symbolsSubscribed: symbols.length,
     durationSeconds,
     updatesReceived: updates,
+    initialSnapshotsReceived: snapshots,
     invalidTimestamps,
+    frameSizeBytes: {
+      ...summarize(sizes),
+      average: sizes.length
+        ? Number((sizes.reduce((sum, size) => sum + size, 0) / sizes.length).toFixed(2))
+        : 0,
+      everyFrameUnder10KB: sizes.length > 0 && sizes.every((size) => size < 10 * 1024),
+      totalBytesReceived: sizes.reduce((sum, size) => sum + size, 0),
+    },
     distributionLatencyMs: summarize(distribution),
     tickToClientAgeMs: summarize(tickAge),
     distributionMeets50ms: distribution.length > 0 && percentile(distribution, 0.95) <= 50,
-    tickToClientMeets50ms: tickAge.length > 0 && percentile(tickAge, 0.95) <= 50,
-    note: "Distribution latency is publication-to-receipt. Tick-to-client age uses snapshot.updatedAt and is valid only if provider timestamps are synchronized to this host's wall clock.",
+    note: "Frame sizes are measured on actual individual JSON frames, not as one combined 61-symbol snapshot. Distribution latency is publication-to-receipt. Tick age is not true provider-event latency unless updatedAt originates from the provider and shares the host clock.",
   };
   console.log(JSON.stringify(report, null, 2));
   if (distribution.length === 0) process.exitCode = 1;
 });
-
