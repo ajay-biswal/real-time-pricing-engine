@@ -4,7 +4,6 @@ import WebSocket from "ws";
 import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
-import { connectMongo, closeMongo } from "./config/mongodb.js";
 import {
   batchSizeMetrics,
   databaseBatchWriteLatency,
@@ -39,7 +38,6 @@ async function closeDependencies(): Promise<void> {
 
   const results = await Promise.allSettled([
     closeRedis(),
-    closeMongo(),
     prisma.$disconnect(),
   ]);
 
@@ -87,7 +85,6 @@ async function main(): Promise<void> {
     await prisma.$queryRaw`SELECT 1`;
     console.log("PostgreSQL connected successfully");
 
-    await connectMongo();
     await connectRedis();
     await initializePricingState();
     await attachClientWebSocket(server);
