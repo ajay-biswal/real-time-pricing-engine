@@ -8,14 +8,18 @@ services:
     env_file:
       - .env
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 5000
       DATABASE_URL: ${DATABASE_URL_DOCKER:?Set DATABASE_URL_DOCKER in .env}
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-pricing_engine}
       REDIS_URL: redis://redis:6379
     ports:
       - "5000:5000"
     depends_on:
       postgres:
+        condition: service_healthy
+      mongo:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -33,7 +37,21 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d pricing_engine"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-pricing_engine}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mongo:
+    image: mongo:8
+    container_name: pricing-mongo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MONGODB_HOST_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -54,4 +72,5 @@ services:
 
 volumes:
   postgres_data:
+  mongo_data:
   redis_data:
