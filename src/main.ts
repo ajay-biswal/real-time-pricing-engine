@@ -4,6 +4,7 @@ import WebSocket from "ws";
 import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
+import { connectMongo, closeMongo } from "./config/mongodb.js";
 import {
   batchSizeMetrics,
   databaseBatchWriteLatency,
@@ -32,16 +33,13 @@ let shuttingDown = false;
 let metricsTimer: ReturnType<typeof setInterval> | undefined;
 
 async function closeDependencies(): Promise<void> {
-  // Stop the provider and drain already-accepted persistence operations before
-  // closing the repository's ingestion queue.
   await closeMarketDataSocket(marketDataSocket);
   await shutdownMarketTickRepository();
-
-  // All accepted persistence operations have drained before dependencies close.
   await closeClientWebSocket();
 
   const results = await Promise.allSettled([
     closeRedis(),
+    closeMongo(),
     prisma.$disconnect(),
   ]);
 
@@ -66,8 +64,6 @@ async function shutdown(signal: string): Promise<void> {
   timeout.unref();
 
   try {
-    // Stop accepting new HTTP connections immediately. Closing WebSockets
-    // below allows this promise to settle instead of waiting indefinitely.
     const serverClosed = new Promise<void>((resolve) => {
       server.close(() => resolve());
     });
@@ -91,6 +87,7 @@ async function main(): Promise<void> {
     await prisma.$queryRaw`SELECT 1`;
     console.log("PostgreSQL connected successfully");
 
+    await connectMongo();
     await connectRedis();
     await initializePricingState();
     await attachClientWebSocket(server);
