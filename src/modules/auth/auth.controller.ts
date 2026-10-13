@@ -4,7 +4,7 @@ import { loginSchema, registerSchema } from "./auth.validation.js";
 import { toPublicMerchant } from "./auth.types.js";
 import { requireAuth } from "./auth.middleware.js";
 
-export const authController = Router();
+export const authController: Router = Router();
 
 function sendError(error: unknown, res: Response, next: NextFunction): void {
   if (error instanceof AuthServiceError) {
