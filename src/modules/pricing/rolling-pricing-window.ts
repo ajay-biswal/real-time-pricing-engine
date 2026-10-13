@@ -64,7 +64,7 @@ export class RollingPricingWindow {
 
     this.expire(cutoff);
     if (isOutOfOrder) this.rebuildExtrema();
-    else this.appendExtrema(entry, cutoff);
+    else this.appendExtrema(entry, cutoff, nowMs);
 
     const first = this.ticks[0];
     const latest = this.ticks[this.ticks.length - 1];
@@ -126,8 +126,8 @@ export class RollingPricingWindow {
     while (this.lows.length && this.lows[0]!.timestamp.getTime() < cutoff) this.lows.shift();
   }
 
-  private appendExtrema(entry: Entry, cutoff: number): void {
-    if (entry.timestamp.getTime() < cutoff || entry.timestamp.getTime() > Date.now()) return;
+  private appendExtrema(entry: Entry, cutoff: number, nowMs: number): void {
+    if (entry.timestamp.getTime() < cutoff || entry.timestamp.getTime() > nowMs) return;
     while (this.highs.length && this.highs[this.highs.length - 1]!.buy <= entry.buy) this.highs.pop();
     this.highs.push(entry);
     while (this.lows.length && this.lows[this.lows.length - 1]!.buy >= entry.buy) this.lows.pop();
