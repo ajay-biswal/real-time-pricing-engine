@@ -20,7 +20,6 @@ const SYMBOL_SET = new Set<string>(MARKET_SYMBOLS);
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const AUTH_TIMEOUT_MS = 10_000;
 const MAX_DEDUPE_KEYS = 50_000;
-const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 const dedupeKeys = new Set<string>();
 const inFlightPersists = new Set<Promise<void>>();
 
@@ -54,7 +53,7 @@ function persistTick(symbol: string, bid: number, ask: number, timestamp: Date):
     console.warn("Ignoring invalid market tick", { symbol });
     return;
   }
-  if (timestampMs > now + MAX_FUTURE_SKEW_MS) {
+  if (timestampMs > now) {
     console.warn("Ignoring market tick with a future timestamp", { symbol, timestamp: timestamp.toISOString() });
     return;
   }
