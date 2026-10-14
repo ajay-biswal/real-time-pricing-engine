@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Search } from "lucide-react";
 import { formatChange, formatPrice, formatTime, numeric, SYMBOLS, type Category, type MarketInstrument } from "../../marketCatalog";
-import type { ConnectionState, MarketSnapshot } from "../../types";
+import type { MarketSnapshot } from "../../types";
 
 type Props = {
   visibleSymbols: MarketInstrument[];
@@ -11,7 +11,6 @@ type Props = {
   snapshots: Record<string, MarketSnapshot>;
   selectedSymbol: string;
   onSelectSymbol: (symbol: string) => void;
-  connection: ConnectionState;
 };
 
 const CATEGORIES: Category[] = ["ALL", "FX", "METALS", "CRYPTO"];
@@ -25,7 +24,6 @@ export function MarketDirectory({
   snapshots,
   selectedSymbol,
   onSelectSymbol,
-  connection
 }: Props) {
   return (
     <section className="panel markets-panel" id="markets">
