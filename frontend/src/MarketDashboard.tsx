@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import type { Merchant } from "./auth";
 import { formatChange, formatPrice, formatTime, numeric, SYMBOLS, type Category } from "./marketCatalog";
 import { useMarketData } from "./useMarketData";
+import { AccountAccessPanel } from "./features/account/AccountAccessPanel";
 
 type DashboardProps = { merchant: Merchant; token: string; onLogout: () => void; onMerchantUpdate: (merchant: Merchant) => void };
 
@@ -12,13 +13,6 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
   const [selectedSymbol, setSelectedSymbol] = useState("EURUSD");
   const [category, setCategory] = useState<Category>("ALL");
   const [search, setSearch] = useState("");
-  const [kycName, setKycName] = useState(merchant.kycApplicantName || "");
-  const [kycDocumentType, setKycDocumentType] = useState(merchant.kycDocumentType || "PASSPORT");
-  const [kycProviderReference, setKycProviderReference] = useState(merchant.kycProviderReference || "");
-  const [kycMessage, setKycMessage] = useState("");
-  const [kycError, setKycError] = useState("");
-  const [tradingAccessMessage, setTradingAccessMessage] = useState("");
-  const [tradingAccessError, setTradingAccessError] = useState("");
 
   const visibleSymbols = useMemo(() => SYMBOLS.filter((item) => {
     const matchesCategory = category === "ALL" || item.category === category;
@@ -51,63 +45,7 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
         <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> MARKET OVERVIEW <span className="eyebrow-date">{new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span></div><h1>Good morning<span className="heading-period">.</span></h1><p className="page-subtitle">Your markets, moving in real time. Here's what's happening today.</p></div><div className="heading-right"><div className="market-open-icon"><Globe2 size={17} /></div><div><strong>Global markets</strong><span>Multi-asset coverage</span></div><span title="Values are supplied by your live pricing engine"><CircleHelp size={17} /></span></div></section>
         {socketError && <div className="inline-alert"><WifiOff size={16} /><span>{socketError}</span></div>}
 
-        <section className="account-access-panel panel">
-          <div className="account-access-main">
-            <div className="panel-kicker">ACCOUNT & PERMISSIONS</div>
-            <h2>Account security</h2>
-            <p className="account-email">{merchant.email} <span className="role-chip">{merchant.role}</span></p>
-            <div className="account-status-row">
-              <span className={"kyc-status-chip " + (merchant.kycStatus === "VERIFIED" ? "verified" : merchant.kycStatus === "PENDING" ? "pending" : "restricted")}>KYC: {merchant.kycStatus.replaceAll("_", " ")}</span>
-              <span className={"kyc-status-chip " + (merchant.accountStatus === "ACTIVE" ? "verified" : "restricted")}>Account: {merchant.accountStatus}</span>
-            </div>
-            <p className="account-help">{merchant.kycStatus === "VERIFIED" ? "Your KYC status is verified. Check trading authorization with the backend." : merchant.kycStatus === "PENDING" ? "Your KYC submission is pending review. Trading access stays restricted until verification succeeds." : "Market data is available, but trading access remains restricted until your KYC is verified."}</p>
-          </div>
-          <div className="account-access-actions">
-            {merchant.role === "MERCHANT" && merchant.kycStatus !== "VERIFIED" && merchant.kycStatus !== "PENDING" && <form className="kyc-form" onSubmit={async (event) => {
-              event.preventDefault();
-              setKycMessage("");
-              setKycError("");
-              try {
-                const response = await fetch("/api/kyc/submissions", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-                  body: JSON.stringify({ applicantName: kycName.trim(), documentType: kycDocumentType, providerReference: kycProviderReference.trim() })
-                });
-                const payload = await response.json() as { error?: string; message?: string; merchant?: Merchant };
-                if (!response.ok) throw new Error(payload.error || "Could not submit KYC.");
-                if (payload.merchant) onMerchantUpdate(payload.merchant);
-                setKycMessage(payload.message || "KYC submission received.");
-              } catch (error) {
-                setKycError(error instanceof Error ? error.message : "Could not submit KYC.");
-              }
-            }}>
-              <label>Applicant name<input value={kycName} onChange={(event) => setKycName(event.target.value)} required minLength={2} maxLength={120} placeholder="Full legal name" /></label>
-              <label>Document type<select value={kycDocumentType} onChange={(event) => setKycDocumentType(event.target.value)}><option value="PASSPORT">Passport</option><option value="NATIONAL_ID">National ID</option><option value="DRIVING_LICENSE">Driving licence</option></select></label>
-              <label>Provider reference<input value={kycProviderReference} onChange={(event) => setKycProviderReference(event.target.value)} required minLength={1} maxLength={200} placeholder="Reference from your KYC provider" /></label>
-              <button className="primary-action" type="submit">Submit KYC details</button>
-              <p className="kyc-disclaimer">Demo flow: metadata only. Do not enter document numbers or upload identity documents here.</p>
-              {kycMessage && <p className="form-success" role="status">{kycMessage}</p>}
-              {kycError && <p className="form-error" role="alert">{kycError}</p>}
-            </form>}
-            <div className="trading-access-box">
-              <div><strong>Trading authorization</strong><small>Verified by the API, not by the UI</small></div>
-              <button className="secondary-action" onClick={async () => {
-                setTradingAccessMessage("");
-                setTradingAccessError("");
-                try {
-                  const response = await fetch("/api/trading/access", { headers: { Authorization: "Bearer " + token } });
-                  const payload = await response.json() as { message?: string; error?: string };
-                  if (!response.ok) throw new Error(payload.error || "Trading access denied.");
-                  setTradingAccessMessage(payload.message || "Trading access granted.");
-                } catch (error) {
-                  setTradingAccessError(error instanceof Error ? error.message : "Trading access denied.");
-                }
-              }}>Check access</button>
-              {tradingAccessMessage && <p className="form-success" role="status">{tradingAccessMessage}</p>}
-              {tradingAccessError && <p className="form-error" role="status">{tradingAccessError}</p>}
-            </div>
-          </div>
-        </section>
+        <AccountAccessPanel merchant={merchant} token={token} onMerchantUpdate={onMerchantUpdate} />
         <section className="summary-grid" aria-label="Market summary">
           <article className="summary-card"><div className="summary-top"><span>TRACKED MARKETS</span><span className="summary-icon violet"><Globe2 size={17} /></span></div><div className="summary-value">{activeCount}<span className="summary-total"> / {SYMBOLS.length}</span></div><div className="summary-foot"><Activity size={13} />{activeCount ? "Markets reporting data" : "Waiting for first prices"}</div></article>
           <article className="summary-card"><div className="summary-top"><span>MARKETS UP</span><span className="summary-icon green"><ArrowUpRight size={18} /></span></div><div className="summary-value">{String(positiveCount).padStart(2, "0")}</div><div className="summary-foot"><span className="status-bullet green-bullet" />Positive 24h change</div></article>
