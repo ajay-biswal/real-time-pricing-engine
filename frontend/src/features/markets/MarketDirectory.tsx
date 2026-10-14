@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, Search, Star } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Search } from "lucide-react";
 import { formatChange, formatPrice, formatTime, numeric, SYMBOLS, type Category, type MarketInstrument } from "../../marketCatalog";
 import type { ConnectionState, MarketSnapshot } from "../../types";
 
@@ -37,7 +37,6 @@ export function MarketDirectory({
         <label className="search-box">
           <Search size={15} />
           <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search markets..." aria-label="Search markets" />
-          <kbd>/</kbd>
         </label>
       </div>
       <div className="filter-tabs" role="tablist" aria-label="Market category">
@@ -57,7 +56,7 @@ export function MarketDirectory({
       <div className="table-scroll">
         <table className="market-table">
           <thead>
-            <tr><th>INSTRUMENT</th><th>BUY PRICE</th><th>SELL PRICE</th><th>24H CHANGE</th><th>24H HIGH</th><th>24H LOW</th><th>UPDATED</th><th /></tr>
+            <tr><th>INSTRUMENT</th><th>BUY PRICE</th><th>SELL PRICE</th><th>24H CHANGE</th><th>24H HIGH</th><th>24H LOW</th><th>UPDATED</th></tr>
           </thead>
           <tbody>
             {visibleSymbols.map((item) => {
@@ -82,13 +81,12 @@ export function MarketDirectory({
                 </tr>
               );
             })}
-            {visibleSymbols.length === 0 && <tr><td colSpan={8} className="no-results">No markets match your search.</td></tr>}
+            {visibleSymbols.length === 0 && <tr><td colSpan={7} className="no-results">No markets match your search.</td></tr>}
           </tbody>
         </table>
       </div>
       <div className="table-footer">
         <span>Showing <strong>{visibleSymbols.length}</strong> of <strong>{SYMBOLS.length}</strong> configured markets</span>
-        <span><span className={"source-dot " + (connection === "connected" ? "live" : "")} /> Values supplied by backend · No simulated prices</span>
       </div>
     </section>
   );
