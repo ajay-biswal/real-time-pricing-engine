@@ -111,7 +111,7 @@ A healthy HTTP response confirms that the API is responding; it does **not** pro
 Ensure PostgreSQL and Redis are running and the host-side `DATABASE_URL` points to the PostgreSQL host port configured in `.env`.
 
 ```bash
-pnpm install --frozen-lockfile
+pnpm --dir backend install --frozen-lockfile
 pnpm --dir backend exec prisma generate
 pnpm --dir backend exec prisma migrate deploy
 pnpm dev
