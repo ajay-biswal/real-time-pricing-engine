@@ -13,6 +13,7 @@ type Props = {
 export function MarketChartPanel({ selected, snapshot, history, connection }: Props) {
   const { symbol, category } = selected;
   const change = numeric(snapshot?.change24h) || 0;
+  const trendColor = change < 0 ? "#dc2626" : "#2563eb";
 
   return (
     <article className="panel chart-panel">
@@ -40,19 +41,19 @@ export function MarketChartPanel({ selected, snapshot, history, connection }: Pr
             <AreaChart data={history} margin={{ top: 14, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8b7cff" stopOpacity={0.24} />
+                  <stop offset="0%" stopColor={trendColor} stopOpacity={0.24} />
                   <stop offset="95%" stopColor="#8b7cff" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke="#242a3c" strokeDasharray="3 5" vertical={false} />
-              <XAxis dataKey="time" tickFormatter={(value: number) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} tick={{ fill: "#737c95", fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={42} />
+              <CartesianGrid stroke="#e7ebf2" strokeDasharray="3 5" vertical={false} />
+              <XAxis dataKey="time" tickFormatter={(value: number) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} tick={{ fill: "#667085", fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={42} />
               <YAxis domain={["auto", "auto"]} orientation="right" tickFormatter={(value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 5 })} tick={{ fill: "#737c95", fontSize: 10 }} axisLine={false} tickLine={false} width={72} />
               <Tooltip
-                contentStyle={{ background: "#151a2b", border: "1px solid #30364b", borderRadius: 10, color: "#f4f5fb", fontSize: 12 }}
+                contentStyle={{ background: "#ffffff", border: "1px solid #dce3ed", borderRadius: 8, color: "#172033", fontSize: 12 }}
                 labelFormatter={(value) => new Date(Number(value)).toLocaleTimeString()}
                 formatter={(value) => [formatPrice(Number(value), symbol), "Buy price"]}
               />
-              <Area type="monotone" dataKey="price" stroke="#9b8cff" strokeWidth={2} fill="url(#priceGradient)" activeDot={{ r: 4, fill: "#b7adff", stroke: "#171b2d", strokeWidth: 2 }} isAnimationActive={false} />
+              <Area type="monotone" dataKey="price" stroke={trendColor} strokeWidth={2} fill="url(#priceGradient)" activeDot={{ r: 4, fill: trendColor, stroke: "#ffffff", strokeWidth: 2 }} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
