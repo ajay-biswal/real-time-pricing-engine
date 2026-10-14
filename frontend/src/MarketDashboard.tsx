@@ -1,78 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Activity, ArrowDownRight, ArrowUpRight, Bell, ChevronDown, CircleHelp, Clock3, Globe2, LayoutDashboard, LineChart, Search, ShieldCheck, Star, Wifi, WifiOff } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { ConnectionState, MarketSnapshot, ServerMessage } from "./types";
 import type { Merchant } from "./auth";
-
-const SYMBOL_CODES = [
-  "AUDUSD", "AUDCAD", "AUDCHF", "AUDJPY", "AUDNZD", "AUDSGD",
-  "CADCHF", "CADJPY", "CHFJPY", "CHFSGD", "EURAUD", "EURCAD",
-  "EURCHF", "EURGBP", "EURJPY", "EURNZD", "EURUSD", "GBPAUD",
-  "GBPCAD", "GBPCHF", "GBPJPY", "GBPNZD", "GBPUSD", "NZDCAD",
-  "NZDCHF", "NZDJPY", "NZDUSD", "USDCAD", "USDCHF", "USDCNH",
-  "USDJPY", "USDMXN", "USDNOK", "USDPLN", "USDSEK", "USDSGD",
-  "USDTRY", "USDZAR", "EURTRY", "GBPTRY", "NOKJPY", "SEKJPY",
-  "SGDJPY", "ZARJPY", "XAUUSD", "XAGUSD", "BTCUSD", "ETHUSD",
-  "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOGUSD", "DOTUSD",
-  "LTCUSD", "BCHUSD", "XLMUSD", "TRXUSD", "UNIUSD", "FILUSD",
-  "AVXUSD"
-] as const;
-
-type Category = "ALL" | "FX" | "METALS" | "CRYPTO";
-type MarketCategory = Exclude<Category, "ALL">;
-type MarketInstrument = { symbol: string; name: string; category: MarketCategory; flag: string };
-const CURRENCY_NAMES: Record<string, string> = {
-  AUD: "Australian Dollar", CAD: "Canadian Dollar", CHF: "Swiss Franc",
-  CNH: "Chinese Yuan", EUR: "Euro", GBP: "British Pound", JPY: "Japanese Yen",
-  MXN: "Mexican Peso", NOK: "Norwegian Krone", NZD: "New Zealand Dollar",
-  PLN: "Polish Zloty", SEK: "Swedish Krona", SGD: "Singapore Dollar",
-  TRY: "Turkish Lira", USD: "US Dollar", ZAR: "South African Rand",
-  XAU: "Gold", XAG: "Silver", BTC: "Bitcoin", ETH: "Ethereum", BNB: "BNB",
-  SOL: "Solana", XRP: "XRP", ADA: "Cardano", DOG: "Dogecoin", DOT: "Polkadot",
-  LTC: "Litecoin", BCH: "Bitcoin Cash", XLM: "Stellar", TRX: "TRON",
-  UNI: "Uniswap", FIL: "Filecoin", AVX: "AVX"
-};
-const CRYPTO_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOGUSD", "DOTUSD", "LTCUSD", "BCHUSD", "XLMUSD", "TRXUSD", "UNIUSD", "FILUSD", "AVXUSD"]);
-const SYMBOLS: MarketInstrument[] = SYMBOL_CODES.map((symbol) => {
-  const base = symbol.slice(0, 3);
-  const quote = symbol.slice(3);
-  const category: MarketCategory = symbol === "XAUUSD" || symbol === "XAGUSD" ? "METALS" : CRYPTO_SYMBOLS.has(symbol) ? "CRYPTO" : "FX";
-  const flag = base === "EUR" ? "🇪🇺" : base === "GBP" ? "🇬🇧" : base === "AUD" ? "🇦🇺" : base === "JPY" ? "🇯🇵" : category === "METALS" ? "◈" : category === "CRYPTO" ? "◆" : "◎";
-  return { symbol, name: (CURRENCY_NAMES[base] || base) + " / " + (CURRENCY_NAMES[quote] || quote), category, flag };
-});
-type ChartPoint = { time: number; price: number };
-function numeric(value: string | undefined): number | null {
-  if (value === undefined || value.trim() === "") return null;
-  const result = Number(value);
-  return Number.isFinite(result) ? result : null;
-}
-function formatPrice(value: string | number | undefined, symbol = ""): string {
-  const parsed = typeof value === "number" ? value : numeric(value);
-  if (parsed === null) return "—";
-  const digits = symbol.endsWith("JPY") ? 3 : parsed >= 1000 ? 2 : parsed >= 10 ? 4 : 5;
-  return parsed.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-function formatChange(value: string | undefined): string {
-  const parsed = numeric(value);
-  return parsed === null ? "—" : (parsed > 0 ? "+" : "") + parsed.toFixed(2) + "%";
-}
-function formatTime(value: string | undefined): string {
-  if (!value) return "Waiting for first update";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Timestamp unavailable" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
+import { formatChange, formatPrice, formatTime, numeric, SYMBOLS, type Category } from "./marketCatalog";
+import { useMarketData } from "./useMarketData";
 
 type DashboardProps = { merchant: Merchant; token: string; onLogout: () => void; onMerchantUpdate: (merchant: Merchant) => void };
 
 export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }: DashboardProps) {
-  const [connection, setConnection] = useState<ConnectionState>("connecting");
-  const [snapshots, setSnapshots] = useState<Record<string, MarketSnapshot>>({});
-  const [history, setHistory] = useState<Record<string, ChartPoint[]>>({});
+  const { connection, snapshots, history, lastMessageAt, socketError } = useMarketData();
   const [selectedSymbol, setSelectedSymbol] = useState("EURUSD");
   const [category, setCategory] = useState<Category>("ALL");
   const [search, setSearch] = useState("");
-  const [lastMessageAt, setLastMessageAt] = useState<string | null>(null);
-  const [socketError, setSocketError] = useState<string | null>(null);
   const [kycName, setKycName] = useState(merchant.kycApplicantName || "");
   const [kycDocumentType, setKycDocumentType] = useState(merchant.kycDocumentType || "PASSPORT");
   const [kycProviderReference, setKycProviderReference] = useState(merchant.kycProviderReference || "");
@@ -80,57 +19,6 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
   const [kycError, setKycError] = useState("");
   const [tradingAccessMessage, setTradingAccessMessage] = useState("");
   const [tradingAccessError, setTradingAccessError] = useState("");
-
-  useEffect(() => {
-    let socket: WebSocket | undefined;
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-    let attempts = 0;
-    let disposed = false;
-    const scheduleReconnect = () => {
-      if (disposed || reconnectTimer) return;
-      attempts += 1;
-      const delay = Math.min(1000 * 2 ** Math.min(attempts - 1, 5), 15000);
-      reconnectTimer = setTimeout(() => { reconnectTimer = undefined; connect(); }, delay);
-    };
-    const connect = () => {
-      if (disposed) return;
-      setConnection(attempts === 0 ? "connecting" : "reconnecting");
-      const url = import.meta.env.VITE_WS_URL || ((window.location.protocol === "https:" ? "wss:" : "ws:") + "//" + window.location.host + "/ws");
-      try { socket = new WebSocket(url); }
-      catch { setConnection("disconnected"); setSocketError("Could not create a WebSocket connection."); scheduleReconnect(); return; }
-      socket.addEventListener("open", () => {
-        attempts = 0;
-        setConnection("connected");
-        setSocketError(null);
-        socket?.send(JSON.stringify({ action: "subscribe", symbols: SYMBOLS.map((item) => item.symbol) }));
-      });
-      socket.addEventListener("message", (event) => {
-        let message: ServerMessage;
-        try { message = JSON.parse(String(event.data)) as ServerMessage; }
-        catch { setSocketError("Received an unreadable message from the server."); return; }
-        if (message.event === "error") { setSocketError(message.message || "The server rejected a request."); return; }
-        if ((message.event === "marketPriceSnapshot" || message.event === "marketPriceUpdate") && message.data && typeof message.data.symbol === "string") {
-          const snapshot = message.data;
-          setSnapshots((current) => ({ ...current, [snapshot.symbol]: snapshot }));
-          const price = numeric(snapshot.buy);
-          const timestamp = new Date(snapshot.updatedAt).getTime();
-          if (price !== null) {
-            setHistory((current) => {
-              const previous = current[snapshot.symbol] || [];
-              return { ...current, [snapshot.symbol]: [...previous, { time: Number.isFinite(timestamp) ? timestamp : Date.now(), price }].slice(-90) };
-            });
-          }
-          setLastMessageAt(new Date().toISOString());
-        }
-      });
-      socket.addEventListener("error", () => setSocketError("Connection issue. Retrying automatically."));
-      socket.addEventListener("close", () => {
-        if (!disposed) { setConnection("reconnecting"); scheduleReconnect(); }
-      });
-    };
-    connect();
-    return () => { disposed = true; if (reconnectTimer) clearTimeout(reconnectTimer); socket?.close(); };
-  }, []);
 
   const visibleSymbols = useMemo(() => SYMBOLS.filter((item) => {
     const matchesCategory = category === "ALL" || item.category === category;
