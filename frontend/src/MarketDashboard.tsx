@@ -42,6 +42,17 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
           <div className="market-updated">Updated {lastMessageAt ? formatTime(lastMessageAt) : "—"}</div>
         </section>
         {socketError && <div className="inline-alert"><WifiOff size={16} /><span>{socketError}</span></div>}
+        {merchant.role === "MERCHANT" && merchant.kycStatus !== "VERIFIED" && (
+          <section className="onboarding-section" aria-label="Complete account verification">
+            <div className="onboarding-heading">
+              <div><h2>{merchant.kycStatus === "PENDING" ? "Verification in progress" : merchant.kycStatus === "REJECTED" ? "Update your verification details" : "Complete your verification"}</h2>
+                <p>{merchant.kycStatus === "PENDING" ? "Your submission is being reviewed." : "Submit your KYC details here to request trading access."}</p>
+              </div>
+              <span className={"onboarding-status " + merchant.kycStatus.toLowerCase().replace("_", "-")}>{merchant.kycStatus === "NOT_SUBMITTED" ? "ACTION REQUIRED" : merchant.kycStatus.replace("_", " ")}</span>
+            </div>
+            <AccountAccessPanel merchant={merchant} token={token} onMerchantUpdate={onMerchantUpdate} />
+          </section>
+        )}
         <section className="summary-grid" aria-label="Market summary">
           <article className="summary-card"><div className="summary-top"><span>MARKETS REPORTING</span><span className="summary-icon blue"><Activity size={17} /></span></div><div className="summary-value">{activeCount}<span className="summary-total"> / {SYMBOLS.length}</span></div></article>
           <article className="summary-card"><div className="summary-top"><span>MARKETS UP</span><span className="summary-icon blue"><ArrowUpRight size={18} /></span></div><div className="summary-value up-value">{String(positiveCount).padStart(2, "0")}</div><div className="summary-foot">Positive 24h change</div></article>
@@ -66,10 +77,12 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
           selectedSymbol={selectedSymbol}
           onSelectSymbol={setSelectedSymbol}
         />
-        <details className="account-details">
-          <summary>Account and verification</summary>
-          <AccountAccessPanel merchant={merchant} token={token} onMerchantUpdate={onMerchantUpdate} />
-        </details>
+        {merchant.kycStatus === "VERIFIED" && (
+          <details className="account-details">
+            <summary>Account settings</summary>
+            <AccountAccessPanel merchant={merchant} token={token} onMerchantUpdate={onMerchantUpdate} />
+          </details>
+        )}
       </div>
     </main>
   </div>;
