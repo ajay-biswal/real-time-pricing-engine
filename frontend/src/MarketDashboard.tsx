@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { Activity, ArrowDownRight, ArrowUpRight, Wifi, WifiOff } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, WifiOff } from "lucide-react";
 import type { Merchant } from "./auth";
-import { formatChange, formatTime, numeric, SYMBOLS, type Category } from "./marketCatalog";
+import { formatTime, numeric, SYMBOLS, type Category } from "./marketCatalog";
 import { useMarketData } from "./useMarketData";
 import { AccountAccessPanel } from "./features/account/AccountAccessPanel";
 import { MarketDirectory } from "./features/markets/MarketDirectory";
