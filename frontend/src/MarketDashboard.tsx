@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Activity, ArrowDownRight, ArrowUpRight, Bell, ChevronDown, CircleHelp, Clock3, Globe2, LayoutDashboard, LineChart, Search, ShieldCheck, Star, Wifi, WifiOff } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, Bell, ChevronDown, CircleHelp, Clock3, Globe2, LayoutDashboard, LineChart, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Merchant } from "./auth";
 import { formatChange, formatPrice, formatTime, numeric, SYMBOLS, type Category } from "./marketCatalog";
 import { useMarketData } from "./useMarketData";
 import { AccountAccessPanel } from "./features/account/AccountAccessPanel";
+import { MarketDirectory } from "./features/markets/MarketDirectory";
 
 type DashboardProps = { merchant: Merchant; token: string; onLogout: () => void; onMerchantUpdate: (merchant: Merchant) => void };
 
@@ -62,12 +63,17 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
           </article>
           <article className="panel movers-panel"><div className="panel-heading"><div><div className="panel-kicker">MARKET PULSE</div><h2>Top movers</h2></div><span className="live-mini"><span className="source-dot live" />LIVE</span></div><p className="panel-description">Biggest 24-hour moves among markets with data.</p><div className="movers-list">{SYMBOLS.filter((item) => snapshots[item.symbol]).sort((a, b) => Math.abs(numeric(snapshots[b.symbol]?.change24h) || 0) - Math.abs(numeric(snapshots[a.symbol]?.change24h) || 0)).slice(0, 5).map((item) => { const snapshot = snapshots[item.symbol]!; const change = numeric(snapshot.change24h) || 0; return <button key={item.symbol} className="mover-row" onClick={() => setSelectedSymbol(item.symbol)}><span className="mover-icon">{item.flag}</span><span className="mover-name"><strong>{item.symbol}</strong><small>{item.name}</small></span><span className="mover-values"><strong className={change >= 0 ? "positive" : "negative"}>{formatChange(snapshot.change24h)}</strong><small>{formatPrice(snapshot.buy, item.symbol)}</small></span></button>; })}{activeCount === 0 && <div className="movers-empty"><Activity size={18} /><span>Movers will appear when the first market snapshots arrive.</span></div>}</div><div className="movers-note"><ShieldCheck size={14} />Based on engine-calculated rolling 24h change</div></article>
         </section>
-        <section className="panel markets-panel" id="markets">
-          <div className="panel-heading markets-heading"><div><div className="panel-kicker">MARKET DIRECTORY</div><h2>All markets <span className="count-chip">{SYMBOLS.length}</span></h2></div><label className="search-box"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search markets..." aria-label="Search markets" /><kbd>/</kbd></label></div>
-          <div className="filter-tabs" role="tablist" aria-label="Market category">{(["ALL", "FX", "METALS", "CRYPTO"] as Category[]).map((item) => <button key={item} role="tab" aria-selected={category === item} className={category === item ? "filter-tab active" : "filter-tab"} onClick={() => setCategory(item)}>{item === "ALL" ? "All markets" : item === "FX" ? "Forex" : item === "METALS" ? "Metals" : "Crypto"}<span>{item === "ALL" ? SYMBOLS.length : SYMBOLS.filter((symbol) => symbol.category === item).length}</span></button>)}</div>
-          <div className="table-scroll"><table className="market-table"><thead><tr><th>INSTRUMENT</th><th>BUY PRICE</th><th>SELL PRICE</th><th>24H CHANGE</th><th>24H HIGH</th><th>24H LOW</th><th>UPDATED</th><th /></tr></thead><tbody>{visibleSymbols.map((item) => { const snapshot = snapshots[item.symbol]; const change = numeric(snapshot?.change24h); return <tr key={item.symbol} className={selectedSymbol === item.symbol ? "selected-row" : ""} onClick={() => setSelectedSymbol(item.symbol)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedSymbol(item.symbol); }}><td><div className="instrument-cell"><span className="instrument-icon">{item.flag}</span><span><strong>{item.symbol}</strong><small>{item.name}</small></span></div></td><td className="number-cell">{snapshot ? formatPrice(snapshot.buy, item.symbol) : <span className="waiting-value">Waiting…</span>}</td><td className="number-cell">{snapshot ? formatPrice(snapshot.sell, item.symbol) : "—"}</td><td>{snapshot ? <span className={"change-chip " + ((change || 0) >= 0 ? "up" : "down")}>{(change || 0) >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{formatChange(snapshot.change24h)}</span> : <span className="muted-dash">—</span>}</td><td className="number-cell">{snapshot ? formatPrice(snapshot.high24h, item.symbol) : "—"}</td><td className="number-cell">{snapshot ? formatPrice(snapshot.low24h, item.symbol) : "—"}</td><td className="updated-cell">{snapshot ? formatTime(snapshot.updatedAt) : "—"}</td><td><button className={selectedSymbol === item.symbol ? "star-button starred" : "star-button"} aria-label={"Select " + item.symbol} onClick={(event) => { event.stopPropagation(); setSelectedSymbol(item.symbol); }}><Star size={14} fill={selectedSymbol === item.symbol ? "currentColor" : "none"} /></button></td></tr>; })}{visibleSymbols.length === 0 && <tr><td colSpan={8} className="no-results">No markets match your search.</td></tr>}</tbody></table></div>
-          <div className="table-footer"><span>Showing <strong>{visibleSymbols.length}</strong> of <strong>{SYMBOLS.length}</strong> configured markets</span><span><span className={"source-dot " + (connection === "connected" ? "live" : "")} /> Values supplied by backend · No simulated prices</span></div>
-        </section>
+        <MarketDirectory
+          visibleSymbols={visibleSymbols}
+          category={category}
+          onCategoryChange={setCategory}
+          search={search}
+          onSearchChange={setSearch}
+          snapshots={snapshots}
+          selectedSymbol={selectedSymbol}
+          onSelectSymbol={setSelectedSymbol}
+          connection={connection}
+        />
         <footer className="page-footer"><span>© {new Date().getFullYear()} Pulse Market Monitor</span><span><ShieldCheck size={13} /> Built on your Real-Time Pricing Engine</span><span>Last message: {formatTime(lastMessageAt || undefined)}</span></footer>
       </div>
     </main>
