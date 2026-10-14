@@ -6,3 +6,5 @@ dist/
 coverage/
 *.log
 /src/generated/prisma
+
+/backend/src/generated/prisma

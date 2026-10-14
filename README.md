@@ -111,9 +111,9 @@ A healthy HTTP response confirms that the API is responding; it does **not** pro
 Ensure PostgreSQL and Redis are running and the host-side `DATABASE_URL` points to the PostgreSQL host port configured in `.env`.
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm exec prisma generate
-pnpm exec prisma migrate deploy
+pnpm --dir backend install --frozen-lockfile
+pnpm --dir backend exec prisma generate
+pnpm --dir backend exec prisma migrate deploy
 pnpm dev
 ```
 
@@ -125,7 +125,7 @@ Useful commands:
 pnpm typecheck
 pnpm test
 pnpm build
-pnpm benchmark:ws -- ALL 120
+pnpm benchmark:ws ALL 120
 ```
 
 See `package.json` for the authoritative list of scripts.
@@ -242,10 +242,11 @@ Key endpoints:
 | GET | `/api/auth/me` | Get the authenticated merchant |
 | POST | `/api/auth/logout` | Revoke the current token |
 | POST | `/api/kyc/submissions` | Submit KYC metadata |
-| PATCH | `/api/kyc/admin/merchants/:merchantId/kyc` | Development-only manual KYC review |
+| GET | `/api/kyc/admin/submissions` | List pending applications (development-only admin key) |
+| PATCH | `/api/kyc/admin/merchants/:merchantId/kyc` | Approve/reject a pending application (development-only admin key) |
 | GET | `/api/trading/access` | Demonstrate verified-merchant access guard |
 
-Passwords are hashed with bcrypt; JWTs use HS256, issuer/audience validation, expiration, and token IDs. Authenticated requests check revocation and reload merchant state. The manual KYC review route is disabled in production and is only for local Postman testing; it is not a real identity-verification workflow.
+Passwords are hashed with bcrypt; JWTs use HS256, issuer/audience validation, expiration, and token IDs. Authenticated requests check revocation and reload merchant state. For the local review UI, set a non-empty `ADMIN_API_KEY` in `.env`. The Docker Compose API deliberately runs with `NODE_ENV=production`, so its admin review endpoints remain disabled. For a local demo, start PostgreSQL and Redis, stop the Compose API container (`docker compose stop app`), then run the API on the host with `NODE_ENV=development PORT=5000 pnpm dev:backend`; in another terminal run the Vite frontend with `cd frontend && pnpm dev`. Open `http://localhost:5173/admin/kyc`, enter the key, then approve or reject applications with a reason. Both admin API endpoints are disabled in production; this key-based UI is for local development only, not production admin authentication. KYC review only changes demo metadata and does not verify real identity documents.
 
 See [Merchant authentication and KYC API](docs/merchant-auth-kyc.md) and import [the Postman collection](postman/merchant-kyc-auth.postman_collection.json) for endpoint details and a smoke-test sequence.
 
@@ -256,20 +257,30 @@ GitHub Actions runs the repository's configured dependency, type-check, test, an
 ## Repository layout
 
 ```text
-src/
-  config/
-  modules/
-    market-data/
-    pricing/
-    persistence/
-    distribution/
-    # merchant/auth/KYC modules
-prisma/
-scripts/
+backend/
+  src/
+    config/
+    modules/
+      market-data/
+      pricing/
+      persistence/
+      distribution/
+      auth/ and kyc/
+  prisma/
+  scripts/
+  tests/
+  package.json
+  tsconfig.json
+  prisma.config.ts
+  Dockerfile
+frontend/
+  src/
+  package.json
+package.json                 # root command shortcuts
+backend/pnpm-lock.yaml       # backend lockfile
 docs/
 postman/
 .github/
-Dockerfile
 docker-compose.yml
 .env.example
 README.md
@@ -278,3 +289,62 @@ README.md
 ## Current status
 
 The core ingestion, rolling-pricing, persistence, Redis distribution, client WebSocket, and merchant auth/KYC components are implemented. A recent local benchmark received updates for 50 of 61 subscribed symbols and measured a 251-byte maximum frame in that run. Full symbol coverage, true end-to-end latency compliance, and all fault-tolerance/recovery scenarios remain to be demonstrated with repeatable live-feed validation.
+
+
+## Frontend dashboard
+
+The React dashboard lives in `frontend/` and connects to the existing client WebSocket at `/ws`. It renders only prices received from the backend; it does not generate mock market data.
+
+### Frontend structure
+
+The UI is split by responsibility so live-data behavior and feature UI can evolve independently:
+
+- `frontend/src/App.tsx` — restores the browser-tab session and switches between authentication and the dashboard.
+- `frontend/src/auth.ts` — typed authentication API calls and merchant/session types.
+- `frontend/src/marketCatalog.ts` — instrument catalog, category metadata, and shared price/time formatters.
+- `frontend/src/useMarketData.ts` — WebSocket lifecycle, subscriptions, reconnect handling, latest snapshots, and session-local chart history.
+- `frontend/src/features/account/AccountAccessPanel.tsx` — merchant status, KYC metadata submission, and backend trading-access check.
+- `src/features/markets/MarketDirectory.tsx` — search, category filters, and the market table.
+- `src/features/markets/MarketChartPanel.tsx` — selected instrument chart and quote details.
+- `src/features/markets/TopMoversPanel.tsx` — ranks the largest observed 24-hour market moves.
+- `frontend/src/MarketDashboard.tsx` — composes the dashboard layout and connects feature components to shared market state.
+
+
+### Run the dashboard locally
+
+From the repository root, install each app's dependencies: `pnpm --dir backend install --frozen-lockfile` and `pnpm --dir frontend install`. Start the backend with `pnpm dev:backend`, then in a second terminal:
+
+```bash
+cd frontend
+cp .env.example .env
+pnpm dev
+```
+
+By default, Vite proxies `/ws`, `/health`, and `/api` to `http://localhost:5000` (the Docker Compose backend port). If you run the backend directly on its default port, set `VITE_BACKEND_ORIGIN=http://localhost:3000` in `frontend/.env`.
+
+For a frontend hosted separately from the backend, set `VITE_WS_URL` to the browser-accessible WebSocket URL, for example `wss://your-api-host.example/ws`. Do not put market-provider credentials in frontend environment variables.
+
+### Workspace checks
+
+Run these from the repository root. `pnpm typecheck` and `pnpm build` validate both apps; `pnpm test` runs backend tests. Run these from the repository root.
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+The price chart is session-local: it plots incoming live updates observed by the browser and does not pretend to be a historical chart loaded from an endpoint that the backend does not currently expose.
+
+### Frontend authentication and authorization
+
+The React dashboard uses the existing merchant API:
+
+- Register and sign in with `POST /api/auth/register` and `POST /api/auth/login`.
+- Validate restored browser-tab sessions with `GET /api/auth/me`; access tokens are kept in `sessionStorage` and sent as bearer tokens for protected API requests.
+- Sign out through `POST /api/auth/logout`, which revokes the current token through Redis.
+- Submit KYC metadata through `POST /api/kyc/submissions`.
+- Check trading permission through `GET /api/trading/access`. The API requires an active account, the `MERCHANT` role, and `kycStatus: VERIFIED`; frontend state is not the security boundary.
+- Market quotes remain read-only and the client WebSocket endpoint remains unauthenticated for the pricing-engine demonstration. Do not connect actual trading actions to the UI without adding authenticated server-side authorization for each trading operation.
+
+The KYC UI is a demonstration metadata form, not a real identity verification provider. The development-only KYC review key must never be placed in the frontend.

@@ -31,7 +31,10 @@ jobs:
           version: 10.28.1
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --dir backend install --frozen-lockfile
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install
 
       - name: Typecheck
         run: pnpm typecheck

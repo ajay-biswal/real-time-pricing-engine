@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { NextFunction, Request, Response } from "express";
 import { toPublicMerchant } from "../auth/auth.types.js";
+import { kycRepository } from "./kyc.repository.js";
 import { kycService, KycServiceError } from "./kyc.service.js";
 import { kycReviewSchema, kycSubmissionSchema } from "./kyc.validation.js";
 
@@ -13,6 +14,16 @@ function handleError(error: unknown, res: Response, next: NextFunction): void {
     return;
   }
   next(error);
+}
+
+export async function listPendingKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    kycService.authorizeDevelopmentReview(req.header("x-admin-api-key") ?? "");
+    const submissions = await kycRepository.listPending();
+    res.json({ submissions });
+  } catch (error) {
+    handleError(error, res, next);
+  }
 }
 
 export async function submitKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
