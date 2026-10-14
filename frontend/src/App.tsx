@@ -48,6 +48,8 @@ export default function App() {
     const currentToken = token;
     try {
       if (currentToken) await logoutAccount(currentToken);
+    } catch {
+      // Clear the local session even if the network is unavailable; the server token expires naturally.
     } finally {
       window.sessionStorage.removeItem(TOKEN_KEY);
       setToken(null);
