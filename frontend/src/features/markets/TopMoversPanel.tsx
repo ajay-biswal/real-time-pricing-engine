@@ -1,4 +1,4 @@
-import { Activity, ShieldCheck } from "lucide-react";
+import { Activity } from "lucide-react";
 import { formatChange, formatPrice, numeric, SYMBOLS } from "../../marketCatalog";
 import type { MarketSnapshot } from "../../types";
 
@@ -20,10 +20,10 @@ export function TopMoversPanel({ snapshots, activeCount, onSelectSymbol }: Props
   return (
     <article className="panel movers-panel">
       <div className="panel-heading">
-        <div><div className="panel-kicker">MARKET PULSE</div><h2>Top movers</h2></div>
+        <div><div className="panel-kicker">24H PERFORMANCE</div><h2>Top movers</h2></div>
         <span className="live-mini"><span className="source-dot live" />LIVE</span>
       </div>
-      <p className="panel-description">Biggest 24-hour moves among markets with data.</p>
+      
       <div className="movers-list">
         {movers.map((item) => {
           const snapshot = snapshots[item.symbol]!;
@@ -41,7 +41,7 @@ export function TopMoversPanel({ snapshots, activeCount, onSelectSymbol }: Props
         })}
         {activeCount === 0 && <div className="movers-empty"><Activity size={18} /><span>Movers will appear when the first market snapshots arrive.</span></div>}
       </div>
-      <div className="movers-note"><ShieldCheck size={14} />Based on engine-calculated rolling 24h change</div>
+
     </article>
   );
 }
