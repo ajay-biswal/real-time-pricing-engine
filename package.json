@@ -4,13 +4,13 @@
   "private": true,
   "packageManager": "pnpm@10.28.1",
   "scripts": {
-    "dev": "pnpm --filter real-time-pricing-engine-backend dev",
-    "dev:backend": "pnpm --filter real-time-pricing-engine-backend dev",
-    "dev:frontend": "pnpm --filter pricing-engine-frontend dev",
-    "build": "pnpm --filter real-time-pricing-engine-backend build && pnpm --filter pricing-engine-frontend build",
-    "typecheck": "pnpm --filter real-time-pricing-engine-backend typecheck && pnpm --filter pricing-engine-frontend typecheck",
-    "test": "pnpm --filter real-time-pricing-engine-backend test",
-    "test:watch": "pnpm --filter real-time-pricing-engine-backend test:watch",
-    "benchmark:ws": "pnpm --filter real-time-pricing-engine-backend benchmark:ws --"
+    "dev": "pnpm --dir backend dev",
+    "dev:backend": "pnpm --dir backend dev",
+    "dev:frontend": "pnpm --dir frontend dev",
+    "build": "pnpm --dir backend build && pnpm --dir frontend build",
+    "typecheck": "pnpm --dir backend typecheck && pnpm --dir frontend typecheck",
+    "test": "pnpm --dir backend test",
+    "test:watch": "pnpm --dir backend test:watch",
+    "benchmark:ws": "pnpm --dir backend benchmark:ws --"
   }
 }

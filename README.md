@@ -112,8 +112,8 @@ Ensure PostgreSQL and Redis are running and the host-side `DATABASE_URL` points 
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --filter real-time-pricing-engine-backend exec prisma generate
-pnpm --filter real-time-pricing-engine-backend exec prisma migrate deploy
+pnpm --dir backend exec prisma generate
+pnpm --dir backend exec prisma migrate deploy
 pnpm dev
 ```
 
@@ -276,9 +276,8 @@ backend/
 frontend/
   src/
   package.json
-pnpm-workspace.yaml
-package.json                 # workspace commands
-pnpm-lock.yaml               # shared lockfile
+package.json                 # root command shortcuts
+backend/pnpm-lock.yaml       # backend lockfile
 docs/
 postman/
 .github/
@@ -313,7 +312,7 @@ The UI is split by responsibility so live-data behavior and feature UI can evolv
 
 ### Run the dashboard locally
 
-From the repository root, install workspace dependencies once with `pnpm install --frozen-lockfile`. Start the backend with `pnpm dev:backend`, then in a second terminal:
+From the repository root, install each app's dependencies: `pnpm --dir backend install --frozen-lockfile` and `pnpm --dir frontend install`. Start the backend with `pnpm dev:backend`, then in a second terminal:
 
 ```bash
 cd frontend
@@ -327,7 +326,7 @@ For a frontend hosted separately from the backend, set `VITE_WS_URL` to the brow
 
 ### Workspace checks
 
-Run these from the repository root. `pnpm typecheck` and `pnpm build` validate both apps; `pnpm test` runs backend tests.
+Run these from the repository root. `pnpm typecheck` and `pnpm build` validate both apps; `pnpm test` runs backend tests. Run these from the repository root.
 
 ```bash
 pnpm typecheck
