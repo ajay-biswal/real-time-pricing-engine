@@ -202,3 +202,35 @@ h1{color:#111827}.heading-period{color:#2563eb}.page-subtitle{color:#667085}
 .account-details .account-access-panel .panel-kicker{margin-bottom:7px}
 .account-details .account-access-panel h2{color:#172033}
 @media(max-width:650px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.summary-grid .summary-card:first-child{grid-column:1/-1}.dashboard-profile{padding-left:8px}.dashboard-profile strong{max-width:105px}.market-updated{font-size:10px}}
+
+/* Keep sign-in and admin screens on the same light palette */
+.auth-brand strong span{color:#2563eb}
+.auth-eyebrow,.auth-loading{color:#2563eb}
+.auth-mode-tabs{background:#f2f4f7}
+.auth-mode-tabs button{color:#667085}
+.auth-mode-tabs button.selected{background:#eff6ff;border-color:#dbeafe;color:#1d4ed8}
+.auth-form>label,.kyc-form>label{color:#344054}
+.auth-form input,.kyc-form input,.kyc-form select{background:#fff;border-color:#d0d5dd;color:#172033}
+.auth-form input::placeholder,.kyc-form input::placeholder{color:#98a2b3}
+.auth-form input:focus,.kyc-form input:focus,.kyc-form select:focus{border-color:#2563eb;box-shadow:0 0 0 3px #2563eb14}
+.auth-submit{background:#2563eb;border-color:#2563eb;box-shadow:none}
+.auth-security-note{border-color:#dbeafe;background:#f5f9ff;color:#2563eb}
+.auth-security-note strong{color:#1d4ed8}.auth-security-note small{color:#667085}
+.auth-footnote{color:#667085}
+.auth-notice{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
+.auth-error{color:#b91c1c}
+.kyc-form{background:#f8fafc;border-color:#e3e8f0}
+.kyc-disclaimer{color:#667085}
+.trading-access-box strong{color:#172033}
+.admin-back-link{color:#475467}.admin-back-link:hover{color:#1d4ed8}
+.admin-brand strong span{color:#2563eb}
+.admin-dev-badge{background:#fffbeb;border-color:#fde68a;color:#92400e}
+.admin-queue-count{background:#fff;border-color:#e3e8f0}
+.admin-queue-count strong{color:#1d4ed8}.admin-queue-count span{color:#667085}
+.admin-key-form{background:#fff;border-color:#e3e8f0}
+.admin-key-form>label{color:#344054}.admin-key-form input{background:#fff;border-color:#d0d5dd;color:#172033}
+.admin-key-form>small{color:#667085}
+.admin-feedback.success{border-color:#dbeafe;background:#eff6ff;color:#1d4ed8}
+.admin-feedback.error{border-color:#fecaca;background:#fef2f2;color:#b91c1c}
+.admin-applicant-avatar{background:#eff6ff;color:#1d4ed8}
+@media(max-width:760px){.admin-kyc-topbar{background:#fff}}
