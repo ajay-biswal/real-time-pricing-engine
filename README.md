@@ -295,6 +295,7 @@ The UI is split by responsibility so live-data behavior and feature UI can evolv
 - `src/features/account/AccountAccessPanel.tsx` — merchant status, KYC metadata submission, and backend trading-access check.
 - `src/features/markets/MarketDirectory.tsx` — search, category filters, and the market table.
 - `src/features/markets/MarketChartPanel.tsx` — selected instrument chart and quote details.
+- `src/features/markets/TopMoversPanel.tsx` — ranks the largest observed 24-hour market moves.
 - `src/MarketDashboard.tsx` — composes the dashboard layout and connects feature components to shared market state.
 
 
