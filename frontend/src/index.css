@@ -234,3 +234,17 @@ h1{color:#111827}.heading-period{color:#2563eb}.page-subtitle{color:#667085}
 .admin-feedback.error{border-color:#fecaca;background:#fef2f2;color:#b91c1c}
 .admin-applicant-avatar{background:#eff6ff;color:#1d4ed8}
 @media(max-width:760px){.admin-kyc-topbar{background:#fff}}
+
+/* Visible merchant onboarding / KYC callout */
+.onboarding-section{margin:0 0 20px;padding:17px 18px;border:1px solid #dbeafe;border-radius:11px;background:#f8fbff}
+.onboarding-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:13px}
+.onboarding-heading h2{font-family:Manrope,sans-serif;font-size:16px;letter-spacing:-.3px;color:#172033}
+.onboarding-heading p{font-size:11px;color:#667085;margin-top:5px;line-height:1.5}
+.onboarding-status{flex-shrink:0;padding:6px 8px;border-radius:6px;background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;letter-spacing:.3px}
+.onboarding-status.pending{background:#fffbeb;color:#92400e}
+.onboarding-status.rejected{background:#fef2f2;color:#b91c1c}
+.onboarding-section .account-access-panel{padding:17px 0 0;margin:0;border:0;border-top:1px solid #dbeafe;border-radius:0;background:transparent;box-shadow:none}
+.onboarding-section .account-access-main .panel-kicker{display:none}
+.onboarding-section .account-access-main h2{font-size:14px}
+.onboarding-section .account-access-actions{gap:10px}
+@media(max-width:650px){.onboarding-section{padding:14px}.onboarding-heading{align-items:flex-start;flex-direction:column}.onboarding-section .account-access-panel{padding-top:14px}}
