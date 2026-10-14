@@ -307,3 +307,16 @@ pnpm build
 ```
 
 The price chart is session-local: it plots incoming live updates observed by the browser and does not pretend to be a historical chart loaded from an endpoint that the backend does not currently expose.
+
+### Frontend authentication and authorization
+
+The React dashboard uses the existing merchant API:
+
+- Register and sign in with `POST /api/auth/register` and `POST /api/auth/login`.
+- Validate restored browser-tab sessions with `GET /api/auth/me`; access tokens are kept in `sessionStorage` and sent as bearer tokens for protected API requests.
+- Sign out through `POST /api/auth/logout`, which revokes the current token through Redis.
+- Submit KYC metadata through `POST /api/kyc/submissions`.
+- Check trading permission through `GET /api/trading/access`. The API requires an active account, the `MERCHANT` role, and `kycStatus: VERIFIED`; frontend state is not the security boundary.
+- Market quotes remain read-only and the client WebSocket endpoint remains unauthenticated for the pricing-engine demonstration. Do not connect actual trading actions to the UI without adding authenticated server-side authorization for each trading operation.
+
+The KYC UI is a demonstration metadata form, not a real identity verification provider. The development-only KYC review key must never be placed in the frontend.
