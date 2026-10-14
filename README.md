@@ -284,6 +284,20 @@ The core ingestion, rolling-pricing, persistence, Redis distribution, client Web
 
 The React dashboard lives in `frontend/` and connects to the existing client WebSocket at `/ws`. It renders only prices received from the backend; it does not generate mock market data.
 
+### Frontend structure
+
+The UI is split by responsibility so live-data behavior and feature UI can evolve independently:
+
+- `src/App.tsx` — restores the browser-tab session and switches between authentication and the dashboard.
+- `src/auth.ts` — typed authentication API calls and merchant/session types.
+- `src/marketCatalog.ts` — instrument catalog, category metadata, and shared price/time formatters.
+- `src/useMarketData.ts` — WebSocket lifecycle, subscriptions, reconnect handling, latest snapshots, and session-local chart history.
+- `src/features/account/AccountAccessPanel.tsx` — merchant status, KYC metadata submission, and backend trading-access check.
+- `src/features/markets/MarketDirectory.tsx` — search, category filters, and the market table.
+- `src/features/markets/MarketChartPanel.tsx` — selected instrument chart and quote details.
+- `src/MarketDashboard.tsx` — composes the dashboard layout and connects feature components to shared market state.
+
+
 ### Run the dashboard locally
 
 Start the backend first, then in a second terminal:
