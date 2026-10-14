@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { Activity, ArrowDownRight, ArrowUpRight, Bell, ChevronDown, CircleHelp, Clock3, Globe2, LayoutDashboard, LineChart, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import type { Merchant } from "./auth";
-import { formatChange, formatPrice, formatTime, numeric, SYMBOLS, type Category } from "./marketCatalog";
+import { formatChange, formatTime, numeric, SYMBOLS, type Category } from "./marketCatalog";
 import { useMarketData } from "./useMarketData";
 import { AccountAccessPanel } from "./features/account/AccountAccessPanel";
 import { MarketDirectory } from "./features/markets/MarketDirectory";
 import { MarketChartPanel } from "./features/markets/MarketChartPanel";
+import { TopMoversPanel } from "./features/markets/TopMoversPanel";
 
 type DashboardProps = { merchant: Merchant; token: string; onLogout: () => void; onMerchantUpdate: (merchant: Merchant) => void };
 
@@ -57,7 +58,7 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
             history={history[selectedSymbol] || []}
             connection={connection}
           />
-          <article className="panel movers-panel"><div className="panel-heading"><div><div className="panel-kicker">MARKET PULSE</div><h2>Top movers</h2></div><span className="live-mini"><span className="source-dot live" />LIVE</span></div><p className="panel-description">Biggest 24-hour moves among markets with data.</p><div className="movers-list">{SYMBOLS.filter((item) => snapshots[item.symbol]).sort((a, b) => Math.abs(numeric(snapshots[b.symbol]?.change24h) || 0) - Math.abs(numeric(snapshots[a.symbol]?.change24h) || 0)).slice(0, 5).map((item) => { const snapshot = snapshots[item.symbol]!; const change = numeric(snapshot.change24h) || 0; return <button key={item.symbol} className="mover-row" onClick={() => setSelectedSymbol(item.symbol)}><span className="mover-icon">{item.flag}</span><span className="mover-name"><strong>{item.symbol}</strong><small>{item.name}</small></span><span className="mover-values"><strong className={change >= 0 ? "positive" : "negative"}>{formatChange(snapshot.change24h)}</strong><small>{formatPrice(snapshot.buy, item.symbol)}</small></span></button>; })}{activeCount === 0 && <div className="movers-empty"><Activity size={18} /><span>Movers will appear when the first market snapshots arrive.</span></div>}</div><div className="movers-note"><ShieldCheck size={14} />Based on engine-calculated rolling 24h change</div></article>
+          <TopMoversPanel snapshots={snapshots} activeCount={activeCount} onSelectSymbol={setSelectedSymbol} />
         </section>
         <MarketDirectory
           visibleSymbols={visibleSymbols}
