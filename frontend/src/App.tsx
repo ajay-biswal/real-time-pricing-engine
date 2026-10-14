@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AuthScreen from "./AuthScreen";
+import AdminKycPage from "./AdminKycPage";
 import { getCurrentMerchant, logoutAccount, type LoginResponse, type Merchant } from "./auth";
 import { MarketDashboard } from "./MarketDashboard";
 
@@ -9,9 +10,14 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const isAdminKycPath = window.location.pathname.replace(/\/+$/, "") === "/admin/kyc";
 
   useEffect(() => {
     let active = true;
+    if (isAdminKycPath) {
+      setCheckingSession(false);
+      return () => { active = false; };
+    }
     const savedToken = window.sessionStorage.getItem(TOKEN_KEY);
     if (!savedToken) {
       setCheckingSession(false);
@@ -36,7 +42,7 @@ export default function App() {
       });
 
     return () => { active = false; };
-  }, []);
+  }, [isAdminKycPath]);
 
   function handleAuthenticated(session: LoginResponse) {
     window.sessionStorage.setItem(TOKEN_KEY, session.accessToken);
@@ -56,6 +62,8 @@ export default function App() {
       setMerchant(null);
     }
   }
+
+  if (isAdminKycPath) return <AdminKycPage />;
 
   if (checkingSession) {
     return <main className="auth-screen"><div className="auth-loading"><span className="auth-brand-mark"><ShieldCheckIcon /></span><strong>Checking your session…</strong></div></main>;
