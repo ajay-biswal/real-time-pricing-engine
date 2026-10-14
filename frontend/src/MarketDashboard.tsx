@@ -65,7 +65,6 @@ export function MarketDashboard({ merchant, token, onLogout, onMerchantUpdate }:
           snapshots={snapshots}
           selectedSymbol={selectedSymbol}
           onSelectSymbol={setSelectedSymbol}
-          connection={connection}
         />
         <details className="account-details">
           <summary>Account and verification</summary>
