@@ -242,10 +242,11 @@ Key endpoints:
 | GET | `/api/auth/me` | Get the authenticated merchant |
 | POST | `/api/auth/logout` | Revoke the current token |
 | POST | `/api/kyc/submissions` | Submit KYC metadata |
-| PATCH | `/api/kyc/admin/merchants/:merchantId/kyc` | Development-only manual KYC review |
+| GET | `/api/kyc/admin/submissions` | List pending applications (development-only admin key) |
+| PATCH | `/api/kyc/admin/merchants/:merchantId/kyc` | Approve/reject a pending application (development-only admin key) |
 | GET | `/api/trading/access` | Demonstrate verified-merchant access guard |
 
-Passwords are hashed with bcrypt; JWTs use HS256, issuer/audience validation, expiration, and token IDs. Authenticated requests check revocation and reload merchant state. The manual KYC review route is disabled in production and is only for local Postman testing; it is not a real identity-verification workflow.
+Passwords are hashed with bcrypt; JWTs use HS256, issuer/audience validation, expiration, and token IDs. Authenticated requests check revocation and reload merchant state. For the local review UI, set a non-empty `ADMIN_API_KEY` in `.env`, restart the API, and open `http://localhost:5173/admin/kyc` while the Vite frontend and API are running. Enter that key in the page to load pending applications, then approve or reject them with a reason. Both admin API endpoints are disabled in production; this key-based UI is for local development only, not production admin authentication. KYC review only changes demo metadata and does not verify real identity documents.
 
 See [Merchant authentication and KYC API](docs/merchant-auth-kyc.md) and import [the Postman collection](postman/merchant-kyc-auth.postman_collection.json) for endpoint details and a smoke-test sequence.
 
