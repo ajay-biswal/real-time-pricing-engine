@@ -278,3 +278,32 @@ README.md
 ## Current status
 
 The core ingestion, rolling-pricing, persistence, Redis distribution, client WebSocket, and merchant auth/KYC components are implemented. A recent local benchmark received updates for 50 of 61 subscribed symbols and measured a 251-byte maximum frame in that run. Full symbol coverage, true end-to-end latency compliance, and all fault-tolerance/recovery scenarios remain to be demonstrated with repeatable live-feed validation.
+
+
+## Frontend dashboard
+
+The React dashboard lives in `frontend/` and connects to the existing client WebSocket at `/ws`. It renders only prices received from the backend; it does not generate mock market data.
+
+### Run the dashboard locally
+
+Start the backend first, then in a second terminal:
+
+```bash
+cd frontend
+cp .env.example .env
+pnpm install
+pnpm dev
+```
+
+By default, Vite proxies `/ws`, `/health`, and `/api` to `http://localhost:5000` (the Docker Compose backend port). If you run the backend directly on its default port, set `VITE_BACKEND_ORIGIN=http://localhost:3000` in `frontend/.env`.
+
+For a frontend hosted separately from the backend, set `VITE_WS_URL` to the browser-accessible WebSocket URL, for example `wss://your-api-host.example/ws`. Do not put market-provider credentials in frontend environment variables.
+
+### Frontend checks
+
+```bash
+pnpm typecheck
+pnpm build
+```
+
+The price chart is session-local: it plots incoming live updates observed by the browser and does not pretend to be a historical chart loaded from an endpoint that the backend does not currently expose.
