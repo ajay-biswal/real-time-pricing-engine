@@ -3,22 +3,42 @@ import { Activity, ArrowDownRight, ArrowUpRight, Bell, ChevronDown, CircleHelp, 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ConnectionState, MarketSnapshot, ServerMessage } from "./types";
 
-const SYMBOLS = [
-  { symbol: "EURUSD", name: "Euro / US Dollar", category: "FX", flag: "🇪🇺" },
-  { symbol: "GBPUSD", name: "British Pound / US Dollar", category: "FX", flag: "🇬🇧" },
-  { symbol: "USDJPY", name: "US Dollar / Japanese Yen", category: "FX", flag: "🇯🇵" },
-  { symbol: "AUDUSD", name: "Australian Dollar / US Dollar", category: "FX", flag: "🇦🇺" },
-  { symbol: "USDCAD", name: "US Dollar / Canadian Dollar", category: "FX", flag: "🇨🇦" },
-  { symbol: "USDCHF", name: "US Dollar / Swiss Franc", category: "FX", flag: "🇨🇭" },
-  { symbol: "XAUUSD", name: "Gold / US Dollar", category: "METALS", flag: "◈" },
-  { symbol: "XAGUSD", name: "Silver / US Dollar", category: "METALS", flag: "◇" },
-  { symbol: "BTCUSD", name: "Bitcoin / US Dollar", category: "CRYPTO", flag: "₿" },
-  { symbol: "ETHUSD", name: "Ethereum / US Dollar", category: "CRYPTO", flag: "Ξ" },
-  { symbol: "BNBUSD", name: "BNB / US Dollar", category: "CRYPTO", flag: "◆" },
-  { symbol: "SOLUSD", name: "Solana / US Dollar", category: "CRYPTO", flag: "◎" }
+const SYMBOL_CODES = [
+  "AUDUSD", "AUDCAD", "AUDCHF", "AUDJPY", "AUDNZD", "AUDSGD",
+  "CADCHF", "CADJPY", "CHFJPY", "CHFSGD", "EURAUD", "EURCAD",
+  "EURCHF", "EURGBP", "EURJPY", "EURNZD", "EURUSD", "GBPAUD",
+  "GBPCAD", "GBPCHF", "GBPJPY", "GBPNZD", "GBPUSD", "NZDCAD",
+  "NZDCHF", "NZDJPY", "NZDUSD", "USDCAD", "USDCHF", "USDCNH",
+  "USDJPY", "USDMXN", "USDNOK", "USDPLN", "USDSEK", "USDSGD",
+  "USDTRY", "USDZAR", "EURTRY", "GBPTRY", "NOKJPY", "SEKJPY",
+  "SGDJPY", "ZARJPY", "XAUUSD", "XAGUSD", "BTCUSD", "ETHUSD",
+  "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOGUSD", "DOTUSD",
+  "LTCUSD", "BCHUSD", "XLMUSD", "TRXUSD", "UNIUSD", "FILUSD",
+  "AVXUSD"
 ] as const;
 
 type Category = "ALL" | "FX" | "METALS" | "CRYPTO";
+type MarketCategory = Exclude<Category, "ALL">;
+type MarketInstrument = { symbol: string; name: string; category: MarketCategory; flag: string };
+const CURRENCY_NAMES: Record<string, string> = {
+  AUD: "Australian Dollar", CAD: "Canadian Dollar", CHF: "Swiss Franc",
+  CNH: "Chinese Yuan", EUR: "Euro", GBP: "British Pound", JPY: "Japanese Yen",
+  MXN: "Mexican Peso", NOK: "Norwegian Krone", NZD: "New Zealand Dollar",
+  PLN: "Polish Zloty", SEK: "Swedish Krona", SGD: "Singapore Dollar",
+  TRY: "Turkish Lira", USD: "US Dollar", ZAR: "South African Rand",
+  XAU: "Gold", XAG: "Silver", BTC: "Bitcoin", ETH: "Ethereum", BNB: "BNB",
+  SOL: "Solana", XRP: "XRP", ADA: "Cardano", DOG: "Dogecoin", DOT: "Polkadot",
+  LTC: "Litecoin", BCH: "Bitcoin Cash", XLM: "Stellar", TRX: "TRON",
+  UNI: "Uniswap", FIL: "Filecoin", AVX: "AVX"
+};
+const CRYPTO_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOGUSD", "DOTUSD", "LTCUSD", "BCHUSD", "XLMUSD", "TRXUSD", "UNIUSD", "FILUSD", "AVXUSD"]);
+const SYMBOLS: MarketInstrument[] = SYMBOL_CODES.map((symbol) => {
+  const base = symbol.slice(0, 3);
+  const quote = symbol.slice(3);
+  const category: MarketCategory = symbol === "XAUUSD" || symbol === "XAGUSD" ? "METALS" : CRYPTO_SYMBOLS.has(symbol) ? "CRYPTO" : "FX";
+  const flag = base === "EUR" ? "🇪🇺" : base === "GBP" ? "🇬🇧" : base === "AUD" ? "🇦🇺" : base === "JPY" ? "🇯🇵" : category === "METALS" ? "◈" : category === "CRYPTO" ? "◆" : "◎";
+  return { symbol, name: (CURRENCY_NAMES[base] || base) + " / " + (CURRENCY_NAMES[quote] || quote), category, flag };
+});
 type ChartPoint = { time: number; price: number };
 function numeric(value: string | undefined): number | null {
   if (value === undefined || value.trim() === "") return null;
