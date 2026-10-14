@@ -75,7 +75,6 @@ export function MarketDirectory({
                   <td className="number-cell">{snapshot ? formatPrice(snapshot.high24h, item.symbol) : "—"}</td>
                   <td className="number-cell">{snapshot ? formatPrice(snapshot.low24h, item.symbol) : "—"}</td>
                   <td className="updated-cell">{snapshot ? formatTime(snapshot.updatedAt) : "—"}</td>
-                  <td><button className={selectedSymbol === item.symbol ? "star-button starred" : "star-button"} aria-label={"Select " + item.symbol} onClick={(event) => { event.stopPropagation(); onSelectSymbol(item.symbol); }}><Star size={14} fill={selectedSymbol === item.symbol ? "currentColor" : "none"} /></button></td>
                 </tr>
               );
             })}
