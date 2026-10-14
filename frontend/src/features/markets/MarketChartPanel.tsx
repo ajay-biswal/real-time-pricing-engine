@@ -42,7 +42,7 @@ export function MarketChartPanel({ selected, snapshot, history, connection }: Pr
               <defs>
                 <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={trendColor} stopOpacity={0.24} />
-                  <stop offset="95%" stopColor="#8b7cff" stopOpacity={0} />
+                  <stop offset="95%" stopColor={trendColor} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="#e7ebf2" strokeDasharray="3 5" vertical={false} />
